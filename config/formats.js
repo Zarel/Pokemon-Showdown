@@ -600,6 +600,13 @@ exports.Formats = [
 		ruleset: ['Pokemon', 'HP Percentage Mod', 'Cancel Mod', 'Team Preview'],
 	},
 	{
+		name: "[Gen 7] CC1v1 Best-of-3",
+
+		bestOf: 3,
+		subformat: 'gen7challengecup1v1',
+		team: 'randomCC',
+	},
+	{
 		name: "[Gen 7] Monotype Random Battle",
 
 		mod: 'gen7',

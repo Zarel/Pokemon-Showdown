@@ -87,13 +87,13 @@ class RoomGame {
 	 * @param {any[]} rest
 	 */
 	addPlayer(user, ...rest) {
-		if (user.userid in this.players) return false;
-		if (this.playerCount >= this.playerCap) return false;
+		if (user.userid in this.players) return null;
+		if (this.playerCount >= this.playerCap) return null;
 		let player = this.makePlayer(user, ...rest);
-		if (!player) return false;
+		if (!player) return null;
 		this.players[user.userid] = player;
 		this.playerCount++;
-		return true;
+		return player;
 	}
 
 	/**
@@ -226,6 +226,106 @@ class RoomGame {
 	}
 }
 
+class BestOfGame extends RoomGame {
+	/**
+	 * @param {Room} room
+	 * @param {string} formatid
+	 * @param {AnyObject} options
+	 */
+	constructor(room, formatid, options) {
+		super(room);
+		const format = Dex.getFormat(formatid);
+		this.format = format.id;
+		this.bestOf = +options.bestOf || 3;
+		this.winThreshold = Math.floor(this.bestOf / 2) + 1;
+		this.p1wins = 0;
+		this.p2wins = 0;
+		this.ties = 0;
+		this.playerCap = 2;
+		/**
+		 * Array of sub-battle roomids and their win states.
+		 * winnerid will be '' for tie, and null for in-progress games.
+		 * @type {{id: string, winnerid: ?string}[]}
+		 */
+		this.games = [];
+		/** @type {?string} */
+		this.overallWinner = null;
+
+		this.title = `${format.name} Best of ${this.bestOf}`;
+
+		this.allowRenames = (!options.rated && !options.tour);
+		this.p1 = /** @type {RoomGamePlayer} */ (this.addPlayer(options.p1));
+		if (!this.p1) throw new Error(`Could not add player 1`);
+		this.p2 = /** @type {RoomGamePlayer} */ (this.addPlayer(options.p2));
+		if (!this.p2) throw new Error(`Could not add player 2`);
+
+		options.parent = room;
+		options.rated = 0;
+		this.options = options;
+		setImmediate(() => {
+			this.nextGame();
+		});
+	}
+	nextGame() {
+		this.games.push({
+			id: Rooms.createBattle(this.format, this.options).id,
+			winnerid: null,
+		});
+		this.updateMainHTML();
+	}
+	updateMainHTML() {
+		let buf = ``;
+		buf += this.games.map(({id, winnerid}) => {
+			const room = Rooms(id);
+			const game = room.game;
+			let progress = `in progress`;
+			if (winnerid) progress = `winner: ${winnerid}`;
+			if (winnerid === '') progress = `tied`;
+			return Chat.html`<p><a href="/${id}">${game.title} - ${progress}</a></p>`;
+		}).join('');
+		if (this.overallWinner) {
+			buf += Chat.html`<p>Overall winner: ${this.overallWinner}</p>`;
+		}
+		this.room.add(`|fieldhtml|${buf}`);
+		this.room.update();
+	}
+	/**
+	 * @param {Room} room
+	 * @param {string} winnerid
+	 */
+	onBattleWin(room, winnerid) {
+		if (this.p1.userid === winnerid) {
+			this.p1wins++;
+		} else if (this.p2.userid === winnerid) {
+			this.p2wins++;
+		} else {
+			this.ties++;
+			this.winThreshold = Math.floor((this.bestOf - this.ties) / 2) + 1;
+		}
+		this.games[this.games.length - 1].winnerid = winnerid;
+
+		if (this.p1wins >= this.winThreshold) {
+			this.onEnd(this.p1.userid);
+		} else if (this.p2wins >= this.winThreshold) {
+			this.onEnd(this.p2.userid);
+		} else {
+			this.nextGame();
+		}
+	}
+	/**
+	 * @param {string} winnerid
+	 */
+	onEnd(winnerid) {
+		this.overallWinner = winnerid;
+		this.updateMainHTML();
+		const parentGame = this.room.parent && this.room.parent.game;
+		if (parentGame && parentGame.onBattleWin) {
+			parentGame.onBattleWin(this.room, winnerid);
+		}
+	}
+}
+
 // these exports are traditionally attached to rooms.js
 exports.RoomGame = RoomGame;
 exports.RoomGamePlayer = RoomGamePlayer;
+exports.BestOfGame = BestOfGame;
