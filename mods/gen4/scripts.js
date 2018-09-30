@@ -294,6 +294,19 @@ let BattleScripts = {
 		// @ts-ignore
 		return this.clampIntRange(Math.floor(damageDealt * move.recoil[0] / move.recoil[1]), 1);
 	},
+
+	clearActiveMove: function (failed) {
+		if (this.activeMove) {
+			if (!failed) {
+				this.lastMove = this.activeMove;
+			} else if (this.activePokemon) {
+				this.activePokemon.lastMove = null;
+			}
+			this.activeMove = null;
+			this.activePokemon = null;
+			this.activeTarget = null;
+		}
+	},
 };
 
 exports.BattleScripts = BattleScripts;
