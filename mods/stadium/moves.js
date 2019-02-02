@@ -46,6 +46,12 @@ let BattleMovedex = {
 					this.debug('Nothing to leech into');
 					return;
 				}
+				// We check if leeched Pokémon has Toxic to increase leeched damage.
+				let toxicCounter = 1;
+				if (pokemon.volatiles['residualdmg']) {
+					pokemon.volatiles['residualdmg'].counter++;
+					toxicCounter = pokemon.volatiles['residualdmg'].counter;
+				}
 				let toLeech = this.clampIntRange(Math.floor(pokemon.maxhp / 16), 1);
 				let damage = this.damage(toLeech, pokemon, leecher);
 				if (damage) this.heal(damage, leecher, pokemon);
