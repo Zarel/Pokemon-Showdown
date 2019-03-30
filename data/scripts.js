@@ -1100,7 +1100,7 @@ let BattleScripts = {
 		if (!item.zMove) return;
 		if (item.zMoveUser && !item.zMoveUser.includes(pokemon.template.species)) return;
 		let atLeastOne = false;
-		/**@type {AnyObject?[]} */
+		/**@type {RequestSubMoveSlot?[]} */
 		let zMoves = [];
 		for (const moveSlot of pokemon.moveSlots) {
 			if (moveSlot.pp <= 0 || moveSlot.disabled) {
@@ -1112,7 +1112,11 @@ let BattleScripts = {
 			if (zMoveName) {
 				let zMove = this.getMove(zMoveName);
 				if (!zMove.isZ && zMove.category === 'Status') zMoveName = "Z-" + zMoveName;
-				zMoves.push({move: zMoveName, target: zMove.target});
+				zMoves.push({
+					move: zMoveName,
+					target: zMove.target,
+					effectiveness: this.getEffectivenessHints(pokemon, zMove, zMove.target),
+				});
 			} else {
 				zMoves.push(null);
 			}

@@ -1,9 +1,12 @@
 type Battle = import('./../sim/battle').Battle
 type Field = import('./../sim/field').Field
 type ModdedDex = typeof import('./../sim/dex')
-type Pokemon = import('./../sim/pokemon').Pokemon
 type Side = import('./../sim/side').Side
 type Validator = import('./../sim/team-validator').Validator
+
+type Pokemon = import('./../sim/pokemon').Pokemon
+type RequestPokemonData = import('./../sim/pokemon').RequestPokemonData
+type RequestSubMoveSlot = import('./../sim/pokemon').RequestSubMoveSlot
 
 type PageTable = import('./../server/chat').PageTable
 type ChatCommands = import('./../server/chat').ChatCommands
@@ -1095,7 +1098,7 @@ interface BattleScriptsData {
 	calcRecoilDamage?: (this: Battle, damageDealt: number, move: Move) => number
 	canMegaEvo?: (this: Battle, pokemon: Pokemon) => string | undefined | null
 	canUltraBurst?: (this: Battle, pokemon: Pokemon) => string | null
-	canZMove?: (this: Battle, pokemon: Pokemon) => (AnyObject | null)[] | void
+	canZMove?: (this: Battle, pokemon: Pokemon) => (RequestSubMoveSlot | null)[] | void
 	forceSwitch?: (this: Battle, damage: SpreadMoveDamage, targets: SpreadMoveTargets, source: Pokemon, move: ActiveMove, moveData: ActiveMove, isSecondary?: boolean, isSelf?: boolean) => SpreadMoveDamage
 	getActiveZMove?: (this: Battle, move: Move, pokemon: Pokemon) => ActiveMove
 	getSpreadDamage?: (this: Battle, damage: SpreadMoveDamage, targets: SpreadMoveTargets, source: Pokemon, move: ActiveMove, moveData: ActiveMove, isSecondary?: boolean, isSelf?: boolean) => SpreadMoveDamage
@@ -1137,7 +1140,7 @@ interface ModdedBattlePokemon {
 	boostBy?: (this: Pokemon, boost: SparseBoostsTable) => boolean | number
 	calculateStat?: (this: Pokemon, statName: StatNameExceptHP, boost: number, modifier?: number) => number
 	getActionSpeed?: (this: Pokemon) => number
-	getRequestData?: (this: Pokemon) => {moves: {move: string, id: string, target?: string, disabled?: boolean}[], maybeDisabled?: boolean, trapped?: boolean, maybeTrapped?: boolean, canMegaEvo?: boolean, canUltraBurst?: boolean, canZMove?: AnyObject | null}
+	getRequestData?: (this: Pokemon) => RequestPokemonData
 	getStat?: (this: Pokemon, statName: StatNameExceptHP, unboosted?: boolean, unmodified?: boolean, fastReturn?: boolean) => number
 	getWeight?: (this: Pokemon) => number
 	hasAbility?: (this: Pokemon, ability: string | string[]) => boolean

@@ -6,6 +6,7 @@
  */
 import Dex = require('./dex');
 global.toId = Dex.getId;
+import {MoveEffectiveness} from './constants';
 import * as Data from './dex-data';
 import {Field} from './field';
 import {Pokemon} from './pokemon';
@@ -1446,7 +1447,7 @@ export class Battle extends Dex.ModdedDex {
 				pokemon.isStaleHP = pokemon.hp;
 			}
 		}
-		if (pokemon.getMoves().length === 0) {
+		if (pokemon.getMoveRequest().length === 0) {
 			pokemon.isStaleCon++;
 			pokemon.isStaleSource = 'struggle';
 		}
@@ -2895,6 +2896,23 @@ export class Battle extends Dex.ModdedDex {
 		if (once) this.hints.add(hint);
 	}
 
+	getEffectivenessHints(source: Pokemon, move: Move, targetType: string) {
+		const effectiveness: MoveEffectiveness[] = [];
+		for (const target of source.allies(true).concat(source.foes(true))) { // Order matters
+			if (!target || target === source || target.fainted) {
+				effectiveness.push(MoveEffectiveness.INVALID);
+				continue;
+			}
+
+			if (!this.validTarget(target, source, targetType)) {
+				effectiveness.push(MoveEffectiveness.INVALID);
+			} else {
+				effectiveness.push(target.getEffectivenessCode(move));
+			}
+		}
+		return effectiveness;
+	}
+
 	add(...parts: (string | number | boolean | ((side: 0 | 1 | boolean) => string) | AnyObject | null | undefined)[]) {
 		if (!parts.some(part => typeof part === 'function')) {
 			this.log.push(`|${parts.join('|')}`);
@@ -3099,7 +3117,7 @@ export class Battle extends Dex.ModdedDex {
 		throw new UnimplementedError('canUltraBurst');
 	}
 
-	canZMove(pokemon: Pokemon): (AnyObject | null)[] | void {
+	canZMove(pokemon: Pokemon): (RequestSubMoveSlot | null)[] | void {
 		throw new UnimplementedError('canZMove');
 	}
 

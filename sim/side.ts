@@ -386,7 +386,7 @@ export class Side {
 			}
 		}
 
-		const moves = pokemon.getMoves();
+		const moves = pokemon.getMoveRequest();
 		if (autoChoose) {
 			for (const [i, move] of requestMoves.entries()) {
 				if (move.disabled) continue;
