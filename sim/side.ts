@@ -839,6 +839,9 @@ export class Side {
 				if (!this.choice.forcedPassesLeft) {
 					return this.emitChoiceError(`Can't pass: You need to switch in a Pokémon to replace ${pokemon.name}`);
 				}
+				if (this.battle.gen >= 7 && this.choice.forcedSwitchesLeft) {
+					return this.emitChoiceError(`Can't pass: You need to switch in a Pokémon on the left`);
+				}
 				this.choice.forcedPassesLeft--;
 			}
 			break;

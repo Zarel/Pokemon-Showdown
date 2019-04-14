@@ -368,8 +368,70 @@ describe('Choices', function () {
 			assert.species(battle.p2.active[0], 'Charizard');
 		});
 
-		it('should allow passing when there are not enough available switch-ins', function () {
+		it('should implement forced slot switching on the left', function () {
 			battle = common.createBattle({gameType: 'doubles'}, [[
+				{species: 'Latias', ability: 'levitate', moves: ['lunardance']},
+				{species: 'Ivysaur', ability: 'overgrow', moves: ['lunardance']},
+				{species: 'Venusaur', ability: 'overgrow', moves: ['tackle']},
+			], [
+				{species: 'Latias', ability: 'blaze', moves: ['lunardance']},
+				{species: 'Charmeleon', ability: 'blaze', moves: ['lunardance']},
+				{species: 'Charizard', ability: 'blaze', moves: ['scratch']},
+			]]);
+
+			battle.makeChoices('move lunardance, move lunardance', 'move lunardance, move lunardance');
+			assert.strictEqual(battle.getAllActive().length, 0, `All active Pok\u00E9mon should have fainted`);
+
+			assert.throws(() => battle.p1.choose('pass, switch 3'), /\[Invalid choice\] Can't pass:/, `Choice 'pass, switch 3' should be invalid`);
+			battle.makeChoices('switch 3, pass', 'switch 3, pass');
+
+			for (const [index, species] of ['Venusaur', 'Ivysaur'].entries()) {
+				assert.species(battle.p1.active[index], species);
+			}
+			for (const [index, species] of ['Charizard', 'Charmeleon'].entries()) {
+				assert.species(battle.p2.active[index], species);
+			}
+
+			assert.fainted(battle.p1.active[1]);
+			assert.fainted(battle.p2.active[1]);
+		});
+
+		it('should disallow passing when there are enough available switch-ins', function () {
+			battle = common.createBattle({gameType: 'doubles'}, [[
+				{species: 'Latias', ability: 'levitate', moves: ['lunardance']},
+				{species: 'Bulbasaur', ability: 'overgrow', moves: ['lunardance']},
+				{species: 'Ivysaur', ability: 'overgrow', moves: ['tackle']},
+				{species: 'Venusaur', ability: 'overgrow', moves: ['tackle']},
+			], [
+				{species: 'Latias', ability: 'blaze', moves: ['lunardance']},
+				{species: 'Charmander', ability: 'blaze', moves: ['lunardance']},
+				{species: 'Charmeleon', ability: 'blaze', moves: ['scratch']},
+				{species: 'Charizard', ability: 'blaze', moves: ['scratch']},
+			]]);
+
+			battle.makeChoices('move lunardance, move lunardance', 'move lunardance, move lunardance');
+			assert.strictEqual(battle.getAllActive().length, 0, `All active Pok\u00E9mon should have fainted`);
+
+			assert.constant(() => battle.turn, () => {
+				assert.throws(() => battle.p1.choosePass(),
+					/\[Invalid choice\] Can't pass: You need to switch in a Pokémon to replace Latias/,
+					`Expected choosePass() to fail`
+				);
+				battle.p1.chooseSwitch(3);
+				battle.p2.chooseSwitch(3);
+				assert.throws(() => battle.p2.choosePass(),
+					/\[Invalid choice\] Can't pass: You need to switch in a Pokémon to replace Charmander/,
+					`Expected choosePass() to fail`
+				);
+			});
+
+			assert.strictEqual(battle.getAllActive().length, 0, `All active Pok\u00E9mon should have fainted`);
+		});
+	});
+
+	describe('[Gen 6] Switch requests', function () {
+		it('should allow passing when there are not enough available switch-ins', function () {
+			battle = common.gen(6).createBattle({gameType: 'doubles'}, [[
 				{species: 'Latias', ability: 'levitate', moves: ['lunardance']},
 				{species: 'Ivysaur', ability: 'overgrow', moves: ['lunardance']},
 				{species: 'Venusaur', ability: 'overgrow', moves: ['tackle']},
@@ -396,7 +458,7 @@ describe('Choices', function () {
 		});
 
 		it('should allow passing when there are not enough available switch-ins even if an active Pokémon is not fainted', function () {
-			battle = common.createBattle({gameType: 'triples'}, [[
+			battle = common.gen(6).createBattle({gameType: 'triples'}, [[
 				{species: 'Bulbasaur', ability: 'overgrow', moves: ['tackle']},
 				{species: 'Clefable', ability: 'unaware', moves: ['healingwish']},
 				{species: 'Latias', ability: 'levitate', moves: ['lunardance']},
@@ -422,7 +484,7 @@ describe('Choices', function () {
 		});
 
 		it('should disallow passing when there are enough available switch-ins', function () {
-			battle = common.createBattle({gameType: 'doubles'}, [[
+			battle = common.gen(6).createBattle({gameType: 'doubles'}, [[
 				{species: 'Latias', ability: 'levitate', moves: ['lunardance']},
 				{species: 'Bulbasaur', ability: 'overgrow', moves: ['lunardance']},
 				{species: 'Ivysaur', ability: 'overgrow', moves: ['tackle']},
@@ -1015,10 +1077,10 @@ describe('Choice extensions', function () {
 
 				battle.makeChoices('move explosion, move tackle 1', 'move tackle 1, move tackle 1');
 
-				battle.choose('p1', 'pass, switch 3');
+				battle.choose('p1', 'switch 3, pass');
 				assert(!battle.p1.activeRequest.noCancel);
 				if (mode === 'revoke') battle.undoChoice('p1');
-				battle.makeChoices('switch 3, pass', 'pass, switch 3');
+				battle.makeChoices('switch 3, pass', 'switch 3, pass');
 
 				for (const [index, species] of ['Chikorita', 'Bulbasaur'].entries()) {
 					assert.species(battle.p1.active[index], species);
@@ -1040,13 +1102,7 @@ describe('Choice extensions', function () {
 				battle = common.createBattle({gameType: 'doubles', cancel: true}, TEAMS);
 				battle.makeChoices('move lunardance, move healingwish', 'move scratch 1, move scratch 1');
 
-				battle.choose('p1', 'switch 3, switch 4');
-				assert(!battle.p1.activeRequest.noCancel);
-				if (mode === 'revoke') battle.undoChoice('p1');
-				assert.throws(() => battle.makeChoices('switch 4, switch 3', 'pass'),
-					/\[Invalid choice\] Can't switch: You can't switch to a fainted Pokémon/,
-					`Expected switch to fail`
-				);
+				assert.sets(() => battle.turn, battle.turn + 1, () => battle.choose('p1', 'switch 3, switch 4'));
 
 				for (const [index, species] of ['Ivysaur', 'Venusaur'].entries()) {
 					assert.species(battle.p1.active[index], species);
@@ -1067,15 +1123,10 @@ describe('Choice extensions', function () {
 				battle = common.createBattle({gameType: 'doubles'}, TEAMS);
 				battle.makeChoices('move lunardance, move healingwish', 'move scratch 1, move scratch 1');
 
-				battle.choose('p1', 'pass, switch 3');
 				assert(battle.p1.activeRequest.noCancel);
-				if (mode === 'revoke') battle.undoChoice('p1');
-				assert.throws(() => battle.makeChoices('switch 3, pass', 'pass'),
-					/\[Invalid choice\] Can't switch: You can't switch to a fainted Pokémon/,
-					`Expected switch to fail`
-				);
+				assert.sets(() => battle.turn, battle.turn + 1, () => battle.choose('p1', 'switch 3, pass'));
 
-				for (const [index, species] of ['Latias', 'Venusaur'].entries()) {
+				for (const [index, species] of ['Venusaur', 'Clefable'].entries()) {
 					assert.species(battle.p1.active[index], species);
 				}
 			});
@@ -1119,13 +1170,16 @@ describe('Choice extensions', function () {
 
 				battle.makeChoices('move explosion, move tackle 1', 'move tackle 1, move tackle 1');
 
-				battle.choose('p1', 'pass, switch 3');
+				battle.choose('p1', 'switch 3, pass');
 				assert(battle.p1.activeRequest.noCancel);
-				if (mode === 'revoke') assert.cantUndo(() => battle.undoChoice('p1'));
-				assert.cantUndo(() => battle.choose('p1', 'switch 3, pass'));
-				battle.choose('p2', 'pass, switch 3');
+				if (mode === 'revoke') {
+					assert.cantUndo(() => battle.undoChoice('p1'));
+				} else {
+					assert.cantUndo(() => battle.choose('p1', 'switch 3, pass'));
+				}
+				battle.choose('p2', 'switch 3, pass');
 
-				for (const [index, species] of ['Deoxys-Attack', 'Chikorita'].entries()) {
+				for (const [index, species] of ['Chikorita', 'Bulbasaur'].entries()) {
 					assert.species(battle.p1.active[index], species);
 				}
 			});
@@ -1175,6 +1229,81 @@ describe('Choice extensions', function () {
 
 				for (const [index, species] of ['Bulbasaur', 'Ivysaur'].entries()) {
 					assert.species(battle.p1.pokemon[index], species);
+				}
+			});
+		}
+	});
+
+	describe('[Gen 6] Undo', function () {
+		const MODES = ['revoke', 'override'];
+		for (const mode of MODES) {
+			it(`should support to ${mode} pass decisions on double switch requests`, function () {
+				battle = common.gen(6).createBattle({cancel: true, gameType: 'doubles'});
+				battle.setPlayer('p1', {team: [
+					{species: "Deoxys-Attack", ability: 'pressure', moves: ['explosion']},
+					{species: "Bulbasaur", ability: 'overgrow', moves: ['tackle']},
+					{species: "Chikorita", ability: 'overgrow', moves: ['tackle']},
+				]});
+				battle.setPlayer('p2', {team: [
+					{species: "Caterpie", ability: 'shielddust', moves: ['tackle']},
+					{species: "Charmander", ability: 'blaze', moves: ['tackle']},
+					{species: "Cyndaquil", ability: 'blaze', moves: ['tackle']},
+				]});
+
+				battle.makeChoices('move explosion, move tackle 1', 'move tackle 1, move tackle 1');
+
+				battle.choose('p1', 'pass, switch 3');
+				if (mode === 'revoke') battle.undoChoice('p1');
+				battle.makeChoices('switch 3, pass', 'pass, switch 3');
+
+				for (const [index, species] of ['Chikorita', 'Bulbasaur'].entries()) {
+					assert.species(battle.p1.active[index], species);
+				}
+			});
+
+			it(`should disallow to ${mode} pass decisions on switch requests by default`, function () {
+				const TEAMS = [[
+					{species: 'Latias', ability: 'levitate', moves: ['lunardance']},
+					{species: 'Clefable', ability: 'overgrow', moves: ['healingwish']},
+					{species: 'Venusaur', ability: 'overgrow', moves: ['tackle']},
+				], [
+					{species: 'Charmander', ability: 'blaze', moves: ['scratch']},
+					{species: 'Charmeleon', ability: 'blaze', moves: ['scratch']},
+					{species: 'Charizard', ability: 'blaze', moves: ['scratch']},
+				]];
+
+				battle = common.gen(6).createBattle({gameType: 'doubles'}, TEAMS);
+				battle.makeChoices('move lunardance, move healingwish', 'move scratch 1, move scratch 1');
+
+				assert.sets(() => battle.turn, battle.turn + 1, () => battle.choose('p1', 'pass, switch 3'));
+
+				for (const [index, species] of ['Latias', 'Venusaur'].entries()) {
+					assert.species(battle.p1.active[index], species);
+				}
+			});
+
+			it(`should disallow to ${mode} pass decisions on double switch requests by default`, function () {
+				battle = common.gen(6).createBattle({gameType: 'doubles'});
+				battle.setPlayer('p1', {team: [
+					{species: "Deoxys-Attack", ability: 'pressure', moves: ['explosion']},
+					{species: "Bulbasaur", ability: 'overgrow', moves: ['tackle']},
+					{species: "Chikorita", ability: 'overgrow', moves: ['tackle']},
+				]});
+				battle.setPlayer('p2', {team: [
+					{species: "Caterpie", ability: 'shielddust', moves: ['tackle']},
+					{species: "Charmander", ability: 'blaze', moves: ['tackle']},
+					{species: "Cyndaquil", ability: 'blaze', moves: ['tackle']},
+				]});
+
+				battle.makeChoices('move explosion, move tackle 1', 'move tackle 1, move tackle 1');
+
+				battle.choose('p1', 'pass, switch 3');
+				if (mode === 'revoke') assert.cantUndo(() => battle.undoChoice('p1'));
+				assert.cantUndo(() => battle.choose('p1', 'switch 3, pass'));
+				battle.choose('p2', 'pass, switch 3');
+
+				for (const [index, species] of ['Deoxys-Attack', 'Chikorita'].entries()) {
+					assert.species(battle.p1.active[index], species);
 				}
 			});
 		}
@@ -1342,35 +1471,10 @@ describe('Choice internals', function () {
 		assert(p1.choice.actions.length > 0);
 		battle.undoChoice('p1');
 		assert.false(p1.choice.actions.length > 0);
-		battle.makeChoices('pass, switch 3', '');
+		battle.makeChoices('switch 3, pass', '');
 
-		assert.fainted(p1.active[0]);
-		assert.species(p1.active[1], 'Koffing');
-	});
-
-	it('should empty the actions list when undoing a pass', function () {
-		battle = common.createBattle({gameType: 'doubles', cancel: true});
-		battle.setPlayer('p1', {team: [
-			{species: "Pineco", ability: 'sturdy', moves: ['selfdestruct']},
-			{species: "Geodude", ability: 'sturdy', moves: ['selfdestruct']},
-			{species: "Koffing", ability: 'levitate', moves: ['smog']},
-		]});
-		battle.setPlayer('p2', {team: [
-			{species: "Skarmory", ability: 'sturdy', moves: ['roost']},
-			{species: "Aggron", ability: 'sturdy', moves: ['irondefense']},
-		]});
-		const p1 = battle.p1;
-
-		battle.makeChoices('move selfdestruct, move selfdestruct', 'move roost, move irondefense');
-
-		p1.choosePass();
-		assert(p1.choice.actions.length > 0);
-		battle.undoChoice('p1');
-		assert.false(p1.choice.actions.length > 0);
-		battle.makeChoices('pass, switch 3', '');
-
-		assert.fainted(p1.active[0]);
-		assert.species(p1.active[1], 'Koffing');
+		assert.fainted(p1.active[1]);
+		assert.species(p1.active[0], 'Koffing');
 	});
 
 	it('should empty the actions list when undoing a shift', function () {
@@ -1401,3 +1505,29 @@ describe('Choice internals', function () {
 	});
 });
 
+describe('[Gen 6] Choice internals', function () {
+	it('should empty the actions list when undoing a pass', function () {
+		battle = common.gen(6).createBattle({gameType: 'doubles', cancel: true});
+		battle.setPlayer('p1', {team: [
+			{species: "Pineco", ability: 'sturdy', moves: ['selfdestruct']},
+			{species: "Geodude", ability: 'sturdy', moves: ['selfdestruct']},
+			{species: "Koffing", ability: 'levitate', moves: ['smog']},
+		]});
+		battle.setPlayer('p2', {team: [
+			{species: "Skarmory", ability: 'sturdy', moves: ['roost']},
+			{species: "Aggron", ability: 'sturdy', moves: ['irondefense']},
+		]});
+		const p1 = battle.p1;
+
+		battle.makeChoices('move selfdestruct, move selfdestruct', 'move roost, move irondefense');
+
+		p1.choosePass();
+		assert(p1.choice.actions.length > 0);
+		battle.undoChoice('p1');
+		assert.false(p1.choice.actions.length > 0);
+		battle.makeChoices('switch 3, pass', '');
+
+		assert.fainted(p1.active[1]);
+		assert.species(p1.active[0], 'Koffing');
+	});
+});

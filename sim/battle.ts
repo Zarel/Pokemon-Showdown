@@ -1032,8 +1032,9 @@ export class Battle extends Dex.ModdedDex {
 				for (const pokemon of side.active) {
 					switchTable.push(!!(pokemon && pokemon.switchFlag));
 				}
+
 				if (switchTable.some(flag => flag === true)) {
-					requests[i] = {forceSwitch: switchTable, side: side.getRequestData()};
+					requests[i] = {forceSwitch: switchTable, forcedSwitchLocations: this.gen >= 7, side: side.getRequestData()};
 				}
 			}
 			break;

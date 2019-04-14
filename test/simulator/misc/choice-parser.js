@@ -114,8 +114,41 @@ describe('Choice parser', function () {
 					assert.throws(() => battle.p1.choose(badChoice));
 				}
 
+				assert(battle.p1.choose(`switch 3, pass`), `Choice 'switch 3, pass' should be valid`);
+			});
+
+			it('should reject early `pass` choices in Gen 7', function () {
+				battle = common.createBattle({gameType: 'doubles'});
+				battle.setPlayer('p1', {team: [
+					{species: "Pineco", ability: 'sturdy', moves: ['selfdestruct']},
+					{species: "Geodude", ability: 'sturdy', moves: ['selfdestruct']},
+					{species: "Koffing", ability: 'levitate', moves: ['smog']},
+				]});
+				battle.setPlayer('p2', {team: [
+					{species: "Skarmory", ability: 'sturdy', moves: ['roost']},
+					{species: "Aggron", ability: 'sturdy', moves: ['irondefense']},
+					{species: "Ekans", ability: 'shedskin', moves: ['wrap']},
+				]});
+				battle.makeChoices('move selfdestruct, move selfdestruct', 'move roost, move irondefense'); // Both p1 active Pokémon faint
+				assert.throws(() => battle.p1.choose(`pass, switch 3`), /\[Invalid choice\] Can't pass:/, `Choice 'pass, switch 3' should be invalid`);
+			});
+
+			it('should accept early `pass` choices in Gen 6', function () {
+				battle = common.gen(6).createBattle({gameType: 'doubles'});
+				battle.setPlayer('p1', {team: [
+					{species: "Pineco", ability: 'sturdy', moves: ['selfdestruct']},
+					{species: "Geodude", ability: 'sturdy', moves: ['selfdestruct']},
+					{species: "Koffing", ability: 'levitate', moves: ['smog']},
+				]});
+				battle.setPlayer('p2', {team: [
+					{species: "Skarmory", ability: 'sturdy', moves: ['roost']},
+					{species: "Aggron", ability: 'sturdy', moves: ['irondefense']},
+					{species: "Ekans", ability: 'shedskin', moves: ['wrap']},
+				]});
+				battle.makeChoices('move selfdestruct, move selfdestruct', 'move roost, move irondefense'); // Both p1 active Pokémon faint
 				assert(battle.p1.choose(`pass, switch 3`), `Choice 'pass, switch 3' should be valid`);
 			});
+
 
 			it('should reject choice details for `pass` choices', function () {
 				battle = common.createBattle({gameType: 'doubles'});
@@ -229,23 +262,20 @@ describe('Choice parser', function () {
 				battle = common.createBattle({gameType: 'doubles'});
 				battle.setPlayer('p1', {team: [
 					{species: "Pineco", ability: 'sturdy', moves: ['selfdestruct']},
-					{species: "Geodude", ability: 'sturdy', moves: ['selfdestruct']},
-					{species: "Koffing", ability: 'levitate', moves: ['smog']},
+					{species: "Geodude", ability: 'sturdy', moves: ['defensecurl']},
 				]});
 				battle.setPlayer('p2', {team: [
 					{species: "Skarmory", ability: 'sturdy', moves: ['roost']},
 					{species: "Aggron", ability: 'sturdy', moves: ['irondefense']},
 				]});
 				const p1 = battle.p1;
-				battle.makeChoices('move selfdestruct, move selfdestruct', 'move roost, move irondefense'); // Both p1 active Pokémon faint
-				battle.makeChoices('pass, switch 3', ''); // Koffing switches in at slot #2
+				battle.makeChoices('move selfdestruct, auto', 'move roost, move irondefense'); // p1a: Pineco on the left faints
 
 				assert.fainted(p1.active[0]);
-				assert.species(p1.active[1], 'Koffing');
 				assert.false.fainted(p1.active[1]);
 
-				assert(battle.choose('p1', 'move smog 2'));
-				assert.strictEqual(battle.p1.getChoice(), `pass, move smog 2`, `Choice mismatch`);
+				assert(battle.choose('p1', 'move defensecurl'));
+				assert.strictEqual(battle.p1.getChoice(), `pass, move defensecurl`, `Choice mismatch`);
 			});
 		});
 
@@ -343,34 +373,33 @@ describe('Choice parser', function () {
 				battle = common.createBattle({gameType: 'triples'});
 				battle.setPlayer('p1', {team: [
 					{species: "Pineco", ability: 'sturdy', moves: ['selfdestruct']},
+					{species: "Gastly", ability: 'levitate', moves: ['protect']},
 					{species: "Geodude", ability: 'sturdy', moves: ['selfdestruct']},
-					{species: "Gastly", ability: 'levitate', moves: ['lunardance']},
-					{species: "Forretress", ability: 'levitate', moves: ['spikes']},
 				]});
 				battle.setPlayer('p2', {team: [
-					{species: "Skarmory", ability: 'sturdy', moves: ['roost']},
-					{species: "Aggron", ability: 'sturdy', moves: ['irondefense']},
-					{species: "Golem", ability: 'sturdy', moves: ['defensecurl']},
+					{species: "Skarmory", ability: 'sturdy', moves: ['protect']},
+					{species: "Aggron", ability: 'sturdy', moves: ['protect']},
+					{species: "Golem", ability: 'sturdy', moves: ['protect']},
 				]});
 				const p1 = battle.p1;
-				battle.makeChoices('move selfdestruct, move selfdestruct, move lunardance', 'move roost, move irondefense, move defensecurl'); // All p1 active Pokémon faint
+				battle.makeChoices('move selfdestruct, move protect, move selfdestruct', 'move protect, move protect, move protect'); // Pineco, Geodude faint
+				assert.fainted(p1.active[0]);
+				assert.false.fainted(p1.active[1]);
+				assert.fainted(p1.active[2]);
 
-				battle.makeChoices('pass, switch 4, default', ''); // Forretress switches in to slot #2
-				assert.species(p1.active[1], 'Forretress');
-
-				const validChoices = ['move spikes', 'move 1'];
+				const validChoices = ['move protect', 'move 1'];
 				for (const action of validChoices) {
 					battle.choose('p1', action);
-					assert.strictEqual(battle.p1.getChoice(), `pass, move spikes, pass`);
+					assert.strictEqual(battle.p1.getChoice(), `pass, move protect, pass`);
 					battle.p1.clearChoice();
 					battle.choose('p1', `pass, ${action}, pass`);
-					assert.strictEqual(battle.p1.getChoice(), `pass, move spikes, pass`);
+					assert.strictEqual(battle.p1.getChoice(), `pass, move protect, pass`);
 					battle.p1.clearChoice();
 					battle.choose('p1', `pass, ${action}`);
-					assert.strictEqual(battle.p1.getChoice(), `pass, move spikes, pass`);
+					assert.strictEqual(battle.p1.getChoice(), `pass, move protect, pass`);
 					battle.p1.clearChoice();
 					battle.choose('p1', `${action}, pass`);
-					assert.strictEqual(battle.p1.getChoice(), `pass, move spikes, pass`);
+					assert.strictEqual(battle.p1.getChoice(), `pass, move protect, pass`);
 					battle.p1.clearChoice();
 				}
 			});
