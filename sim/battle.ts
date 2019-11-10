@@ -746,12 +746,15 @@ export class Battle {
 		if (Array.isArray(thing)) {
 			for (const [i, pokemon] of thing.entries()) {
 				// console.log(`Event: ${eventName}, Target: ${'' + pokemon}, ${i}`);
-				const curHandlers = this.findEventHandlers(pokemon, eventName, sourceThing);
+				const curHandlers = this.findEventHandlers(pokemon, eventName);
 				for (const handler of curHandlers) {
 					handler.target = pokemon; // Original "thing"
 					handler.index = i;
 				}
 				handlers = handlers.concat(curHandlers);
+			}
+			if (sourceThing) {
+				handlers.push(...this.findPokemonEventHandlers(sourceThing, `onSource${eventName}`));
 			}
 			return handlers;
 		}

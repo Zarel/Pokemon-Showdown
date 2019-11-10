@@ -2742,6 +2742,7 @@ let BattleItems = {
 			basePower: 100,
 			type: "Fairy",
 		},
+		onAfterMoveSecondaryPriority: 3,
 		onAfterMoveSecondary(target, source, move) {
 			if (move.category === 'Physical') {
 				target.eatItem();
@@ -2999,7 +3000,8 @@ let BattleItems = {
 		onModifyDamage(damage, source, target, move) {
 			return this.chainModify([0x14CC, 0x1000]);
 		},
-		onAfterMoveSecondarySelf(source, target, move) {
+		onSourceAfterMoveSecondaryPriority: 1,
+		onSourceAfterMoveSecondary(target, source, move) {
 			if (source && source !== target && move && move.category !== 'Status') {
 				this.damage(source.maxhp / 10, source, source, this.dex.getItem('lifeorb'));
 			}
@@ -3316,6 +3318,7 @@ let BattleItems = {
 			basePower: 100,
 			type: "Dark",
 		},
+		onAfterMoveSecondaryPriority: 3,
 		onAfterMoveSecondary(target, source, move) {
 			if (move.category === 'Special') {
 				target.eatItem();
@@ -4675,6 +4678,7 @@ let BattleItems = {
 		fling: {
 			basePower: 10,
 		},
+		onAfterMoveSecondaryPriority: 2,
 		onAfterMoveSecondary(target, source, move) {
 			if (source && source !== target && source.hp && target.hp && move && move.category !== 'Status') {
 				if (!source.isActive || !this.canSwitch(source.side) || source.forceSwitchFlag || target.forceSwitchFlag) return;
@@ -5119,8 +5123,8 @@ let BattleItems = {
 		fling: {
 			basePower: 30,
 		},
-		onAfterMoveSecondarySelfPriority: -1,
-		onAfterMoveSecondarySelf(pokemon, target, move) {
+		onSourceAfterMoveSecondaryPriority: 1,
+		onSourceAfterMoveSecondary(target, pokemon, move) {
 			if (move.category !== 'Status') {
 				this.heal(pokemon.lastDamage / 8, pokemon);
 			}

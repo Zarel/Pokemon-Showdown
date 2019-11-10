@@ -132,7 +132,7 @@ let BattleMovedex = {
 		desc: "Raises the user's Attack by 2 stages if this move knocks out the target.",
 		shortDesc: "Raises user's Attack by 2 if this KOes the target.",
 		basePower: 30,
-		onAfterMoveSecondarySelf(pokemon, target, move) {
+		onAfterMoveSecondary(target, pokemon, move) {
 			if (!target || target.fainted || target.hp <= 0) this.boost({atk: 2}, pokemon, pokemon, move);
 		},
 	},

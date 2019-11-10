@@ -43,7 +43,7 @@ let BattleItems = {
 	},
 	"bigroot": {
 		inherit: true,
-		onAfterMoveSecondarySelf(source, target) {
+		onSourceAfterMoveSecondary(target, source) {
 			if (source.hasType('Grass')) {
 				this.heal(source.lastDamage / 8, source);
 			}
@@ -165,7 +165,7 @@ let BattleItems = {
 				}
 			}
 		},
-		onAfterMoveSecondarySelf(source, target, move) {
+		onSourceAfterMoveSecondary(target, source, move) {
 			let GossamerWingUsers = ["Butterfree", "Masquerain", "Beautifly", "Mothim", "Vivillon"];
 			if (move && move.effectType === 'Move' && move.category === 'Status' && GossamerWingUsers.includes(source.template.species)) {
 				this.heal(source.maxhp / 16);

@@ -241,11 +241,6 @@ let BattleScripts = {
 			this.singleEvent('MoveFail', move, null, target, pokemon, move);
 			return true;
 		}
-
-		if (!move.negateSecondary) {
-			this.singleEvent('AfterMoveSecondarySelf', move, null, pokemon, target, move);
-			this.runEvent('AfterMoveSecondarySelf', pokemon, target, move);
-		}
 		return true;
 	},
 	// tryMoveHit can be found on scripts.js

@@ -4925,7 +4925,7 @@ let BattleMovedex = {
 		pp: 25,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1},
-		onAfterMoveSecondarySelf(pokemon, target, move) {
+		onAfterMoveSecondary(target, pokemon, move) {
 			if (!target || target.fainted || target.hp <= 0) this.boost({atk: 3}, pokemon, pokemon, move);
 		},
 		secondary: null,
@@ -9438,8 +9438,8 @@ let BattleMovedex = {
 		effect: {
 			noCopy: true, // doesn't get copied by Baton Pass
 			duration: 2,
-			onSourceInvulnerabilityPriority: 1,
-			onSourceInvulnerability(target, source, move) {
+			onAnyInvulnerabilityPriority: 1,
+			onAnyInvulnerability(target, source, move) { // onSourceInvulnerability would only run once
 				if (move && source === this.effectData.target && target === this.effectData.source) return 0;
 			},
 			onSourceAccuracy(accuracy, target, source, move) {
@@ -13438,7 +13438,7 @@ let BattleMovedex = {
 				move.willChangeForme = true;
 			}
 		},
-		onAfterMoveSecondarySelf(pokemon, target, move) {
+		onAfterMoveSecondary(target, pokemon, move) {
 			if (move.willChangeForme) {
 				pokemon.formeChange(pokemon.template.speciesid === 'meloettapirouette' ? 'Meloetta' : 'Meloetta-Pirouette', this.effect, false, '[msg]');
 			}

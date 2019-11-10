@@ -76,7 +76,7 @@ let BattleStatuses = {
 				target.cureStatus();
 			}
 		},
-		onAfterMoveSecondarySelf(pokemon, target, move) {
+		onSourceAfterMoveSecondary(target, pokemon, move) {
 			if (move.flags['defrost']) pokemon.cureStatus();
 		},
 		onResidual(pokemon) {

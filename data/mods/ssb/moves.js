@@ -198,7 +198,7 @@ let BattleMovedex = {
 			this.add('-anim', source, "Continental Crush", target);
 			this.add('-anim', source, "Giga Impact", target);
 		},
-		onAfterMoveSecondarySelf(pokemon) {
+		onAfterMoveSecondary(target, pokemon) {
 			pokemon.clearBoosts();
 			this.add('-clearboost', pokemon);
 			this.boost({atk: -1, def: -1, spe: -1}, pokemon, pokemon, this.dex.getActiveMove('Cataclysm'));
@@ -1071,7 +1071,7 @@ let BattleMovedex = {
 			this.add('-anim', source, 'Swords Dance', source);
 			this.add('-anim', source, 'Bloom Doom', target);
 		},
-		onAfterMoveSecondarySelf() {
+		onAfterMoveSecondary() {
 			this.field.setTerrain('grassyterrain');
 		},
 		onAfterMove(pokemon) {
@@ -1529,7 +1529,7 @@ let BattleMovedex = {
 			this.add('-anim', source, 'Eruption', target);
 			this.add('-anim', source, 'Sunny Day', source);
 		},
-		onAfterMoveSecondarySelf() {
+		onAfterMoveSecondary() {
 			this.field.setWeather('sunnyday');
 		},
 		secondary: null,
@@ -2272,7 +2272,7 @@ let BattleMovedex = {
 		onPrepareHit(target, source) {
 			this.add('-anim', source, "Draco Meteor", target);
 		},
-		onAfterMoveSecondarySelf(pokemon, target, move) {
+		onAfterMoveSecondary(target, pokemon, move) {
 			this.heal(pokemon.maxhp * 0.15, pokemon, pokemon, move); // 15% health recovered
 		},
 		secondary: null,
@@ -3020,7 +3020,7 @@ let BattleMovedex = {
 			this.add('-anim', source, "Dragon Hammer", target);
 			this.add('-anim', target, "Earthquake", target);
 		},
-		onAfterMoveSecondarySelf(pokemon) {
+		onAfterMoveSecondary(target, pokemon) {
 			let stockpileLayers = 0;
 			if (pokemon.volatiles['stockpile']) stockpileLayers = pokemon.volatiles['stockpile'].layers;
 			let boosts = {};
@@ -4061,7 +4061,7 @@ let BattleMovedex = {
 			this.add('-anim', source, zmove.name, target);
 			this.add('-anim', source, "Transform", source);
 		},
-		onAfterMoveSecondarySelf(pokemon, move) {
+		onAfterMoveSecondary(target, pokemon, move) {
 			/** @type {{[move: string]: string[]}} */
 			let claims = {
 				bravebird: ['Braviary', 'Crobat', 'Decidueye', 'Dodrio', 'Farfetch\'d', 'Golbat', 'Mandibuzz', 'Pidgeot', 'Skarmory', 'Staraptor', 'Swanna', 'Swellow', 'Talonflame', 'Tapu Koko', 'Toucannon'],
@@ -4358,7 +4358,7 @@ let BattleMovedex = {
 		onPrepareHit(target, source) {
 			this.add('-anim', source, "Gyro Ball", target);
 		},
-		onAfterMoveSecondarySelf(pokemon) {
+		onAfterMoveSecondary(target, pokemon) {
 			if (!this.field.pseudoWeather.trickroom) {
 				this.field.addPseudoWeather('trickroom', pokemon);
 			}
@@ -4817,7 +4817,7 @@ let BattleMovedex = {
 		},
 		effect: {
 			duration: 1,
-			onAfterMoveSecondarySelf(pokemon, target, move) {
+			onSourceAfterMoveSecondary(target, pokemon, move) {
 				if (pokemon.template.speciesid === 'meloettapirouette') {
 					pokemon.formeChange('Meloetta');
 				} else {

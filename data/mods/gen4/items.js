@@ -152,7 +152,7 @@ let BattleItems = {
 	"lifeorb": {
 		inherit: true,
 		onModifyDamage() {},
-		onAfterMoveSecondarySelf() {},
+		onSourceAfterMoveSecondary() {},
 		onBasePower(basePower, user, target) {
 			if (!target.volatiles['substitute']) {
 				user.addVolatile('lifeorb');
@@ -164,7 +164,7 @@ let BattleItems = {
 		},
 		effect: {
 			duration: 1,
-			onAfterMoveSecondarySelf(source, target, move) {
+			onSourceAfterMoveSecondary(target, source, move) {
 				if (move && move.effectType === 'Move' && source && source.volatiles['lifeorb']) {
 					this.damage(source.maxhp / 10, source, source, this.dex.getItem('lifeorb'));
 					source.removeVolatile('lifeorb');

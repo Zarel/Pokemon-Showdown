@@ -75,7 +75,7 @@ let BattleItems = {
 	},
 	lifeorb: {
 		inherit: true,
-		onAfterMoveSecondarySelf(source, target, move) {
+		onSourceAfterMoveSecondary(target, source, move) {
 			if (source && source !== target && move && move.category !== 'Status' && !move.ohko) {
 				this.damage(source.maxhp / 10, source, source, this.dex.getItem('lifeorb'));
 			}

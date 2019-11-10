@@ -931,8 +931,8 @@ let BattleMovedex = {
 		desc: "Until the end of the next turn, the target cannot avoid the user's moves, even if the target is in the middle of a two-turn move. When this effect is started against the target, this and Mind Reader's effects end for every other Pokemon against that target. If the target leaves the field using Baton Pass, the replacement remains under this effect. If the user leaves the field using Baton Pass, this effect is restarted against the same target for the replacement. The effect ends if either the user or the target leaves the field.",
 		effect: {
 			duration: 2,
-			onSourceInvulnerabilityPriority: 1,
-			onSourceInvulnerability(target, source, move) {
+			onAnyInvulnerabilityPriority: 1,
+			onAnyInvulnerability(target, source, move) { // onSourceInvulnerability would only run once
 				if (move && source === this.effectData.target && target === this.effectData.source) return 0;
 			},
 			onSourceAccuracy(accuracy, target, source, move) {

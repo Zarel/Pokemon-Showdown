@@ -155,11 +155,6 @@ let BattleScripts = {
 			this.singleEvent('MoveFail', move, null, target, pokemon, move);
 			return false;
 		}
-
-		if (!move.negateSecondary && !(move.hasSheerForce && pokemon.hasAbility('sheerforce'))) {
-			this.singleEvent('AfterMoveSecondarySelf', move, null, pokemon, target, move);
-			this.runEvent('AfterMoveSecondarySelf', pokemon, target, move);
-		}
 		return true;
 	},
 	tryMoveHit(target, pokemon, move) {

@@ -297,6 +297,7 @@ let BattleAbilities = {
 	"berserk": {
 		desc: "When this Pokemon has more than 1/2 its maximum HP and takes damage from an attack bringing it to 1/2 or less of its maximum HP, its Special Attack is raised by 1 stage. This effect applies after all hits from a multi-hit move; Sheer Force prevents it from activating if the move has a secondary effect.",
 		shortDesc: "This Pokemon's Sp. Atk is raised by 1 when it reaches 1/2 or less of its max HP.",
+		onAfterMoveSecondaryPriority: 4,
 		onAfterMoveSecondary(target, source, move) {
 			if (!source || source === target || !target.hp || !move.totalDamage) return;
 			const lastAttackedBy = target.getLastAttackedBy();
@@ -422,6 +423,7 @@ let BattleAbilities = {
 	"colorchange": {
 		desc: "This Pokemon's type changes to match the type of the last move that hit it, unless that type is already one of its types. This effect applies after all hits from a multi-hit move; Sheer Force prevents it from activating if the move has a secondary effect.",
 		shortDesc: "This Pokemon's type changes to the type of a move it's hit by, unless it has the type.",
+		onAfterMoveSecondaryPriority: 4,
 		onAfterMoveSecondary(target, source, move) {
 			if (!target.hp) return;
 			let type = move.type;
@@ -2323,6 +2325,7 @@ let BattleAbilities = {
 	"pickpocket": {
 		desc: "If this Pokemon has no item, it steals the item off a Pokemon that makes contact with it. This effect applies after all hits from a multi-hit move; Sheer Force prevents it from activating if the move has a secondary effect.",
 		shortDesc: "If this Pokemon has no item, it steals the item off a Pokemon making contact with it.",
+		onAfterMoveSecondaryPriority: -1,
 		onAfterMoveSecondary(target, source, move) {
 			if (source && source !== target && move && move.flags['contact']) {
 				if (target.item) {

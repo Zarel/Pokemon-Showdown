@@ -875,7 +875,7 @@ let BattleMovedex = {
 		shortDesc: "Effect varies with terrain. (30% chance acc -1)",
 		effect: {
 			duration: 1,
-			onAfterMoveSecondarySelf(source, target, move) {
+			onSourceAfterMoveSecondary(target, source, move) {
 				if (this.randomChance(3, 10)) {
 					this.boost({accuracy: -1}, target, source);
 				}
