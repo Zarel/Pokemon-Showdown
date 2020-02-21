@@ -18,6 +18,7 @@
 /* eslint no-else-return: "error" */
 
 const crypto = require('crypto');
+const assert = require('assert');
 
 const avatarTable = new Set([
 	'aaron',
@@ -1322,6 +1323,101 @@ exports.commands = {
 				connection.popup(`${(matchMessage ? matchMessage + "\n\n" : "")}Your team is valid for ${format.name}.`);
 			} else {
 				connection.popup(`${(matchMessage ? matchMessage + "\n\n" : "")}Your team was rejected for the following reasons:\n\n- ${result.slice(1).replace(/\n/g, '\n- ')}`);
+			}
+		});
+	},
+
+	'!ulteam': true,
+	ulteam(target, room, user, connection) {
+		if (!(user.named && user.registered)) {
+			return this.popupReply('You must be registered to upload a team.');
+		}
+		let strformat, teamname, team, ispublic;
+		try {
+			let targets = target.split(' ');
+			strformat = targets[0];
+			teamname = targets[1];
+			team = targets[2];
+			ispublic = parseInt(targets[3]);
+			assert(ispublic <= 1 && ispublic >= 0);
+		} catch (e) {
+			return this.errorReply("Unknown parsing error occurred.");
+		}
+		let originalFormat = Dex.getFormat(strformat);
+		// Note: The default here of [Gen 7] Pokebank Anything Goes isn't normally hit; since the web client will send a default format
+		let format = originalFormat.effectType === 'Format' ? originalFormat : Dex.getFormat('[Gen 7] Pokebank Anything Goes');
+		if (format.effectType !== 'Format') return this.popupReply("Please provide a valid format.");
+
+		TeamValidatorAsync.get(format.id).validateTeam(team).then(result => {
+			let matchMessage = (originalFormat === format ? "" : `The format '${originalFormat.name}' was not found.`);
+			if (result.charAt(0) === '1') {
+				// team is valid for format, upload it
+				LoginServer.request('uploadteam', {
+					userid: user.id,
+					teamname: teamname,
+					format: format.id,
+					packedteam: team,
+					public: ispublic,
+				}).then(res => {
+					let [data] = res;
+					let response;
+					try {
+						response = parseInt(data);
+						assert(response <= 2 && response >= 0);
+					} catch (e) {
+						connection.popup('Unexpected response from server; try again later.');
+						return;
+					}
+					switch (response) {
+					case 0:
+						connection.popup('You must be logged in to upload a team.');
+						return;
+					case 1:
+						connection.popup('You have already uploaded this team (possibly under a different name).');
+						return;
+					case 2:
+						connection.popup('Success! Team is now uploaded ' + (ispublic ? 'publicly.' : 'privately.'));
+						return;
+					}
+				});
+			} else {
+				connection.popup(`${(matchMessage ? matchMessage + "\n\n" : "")}Your team was rejected for the following reasons:\n\n- ${result.slice(1).replace(/\n/g, '\n- ')}`);
+			}
+		});
+	},
+
+	'!shareteam': true,
+	shareteam(target, room, user, connection) {
+		if (!(user.named && user.registered)) {
+			return this.popupReply('You must log in to share your uploaded teams.');
+		}
+		let teamid = this.splitTarget(target);
+		if (!this.targetUser) {
+			return this.popupReply(`User "${this.targetUsername}" not found.`);
+		}
+		if (user.id === this.targetUser.id) {
+			return this.popupReply("You cannot share a team with yourself!");
+		}
+		LoginServer.request('shareteam', {
+			ownerid: user.id,
+			userid: this.targetUser.id,
+			teamid: teamid,
+		}).then(res => {
+			let [data] = res;
+			let response;
+			try {
+				response = parseInt(data);
+				assert(response <= 2 && response >= 1);
+			} catch (e) {
+				connection.popup('Unexpected response from server; try again later.');
+				return;
+			}
+			switch (response) {
+			case 1:
+				connection.popup('Team does not exist or you don\'t own it.');
+				return;
+			case 2:
+				connection.popup(`Successfully shared team with ${this.targetUsername}!`);
 			}
 		});
 	},
