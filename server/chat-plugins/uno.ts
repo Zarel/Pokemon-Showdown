@@ -782,7 +782,7 @@ export const commands: ChatCommands = {
 			const game = room.getGame(UNO);
 			if (!game) return this.errorReply("There is no UNO game going on in this room right now.");
 			if (!this.canTalk()) return false;
-			if (!game.joinGame(user)) return this.errorReply("Unable to join the game.");
+			if (!game.joinGame(user)) return this.errorReply("You have already joined the game of UNO.");
 
 			return this.sendReply("You have joined the game of UNO.");
 		},
@@ -792,7 +792,7 @@ export const commands: ChatCommands = {
 			if (!room) return this.requiresRoom();
 			const game = room.getGame(UNO);
 			if (!game) return this.errorReply("There is no UNO game going on in this room right now.");
-			if (!game.leaveGame(user)) return this.errorReply("Unable to leave the game.");
+			if (!game.leaveGame(user)) return this.errorReply("You are not in the game of UNO.");
 			return this.sendReply("You have left the game of UNO.");
 		},
 
