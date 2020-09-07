@@ -1686,7 +1686,7 @@ export class GameRoom extends BasicRoom {
 		const spaceIndex = formatidLine.indexOf(' ');
 		const formatid = JSON.parse(formatidLine.slice(spaceIndex)).formatid;
 		return {players, playerCount, formatid};
-  }
+	}
 
 	getReplayData() {
 		if (!this.roomid.endsWith('pw')) return {id: this.roomid.slice(7)};
