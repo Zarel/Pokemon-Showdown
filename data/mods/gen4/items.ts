@@ -203,7 +203,7 @@ export const Items: {[k: string]: ModdedItemData} = {
 			},
 		},
 		onUpdate(pokemon) {
-			if (pokemon.volatiles.attract && pokemon.useItem()) {
+			if (pokemon.volatiles['attract'] && pokemon.useItem()) {
 				pokemon.removeVolatile('attract');
 				this.add('-end', pokemon, 'move: Attract', '[from] item: Mental Herb');
 			}

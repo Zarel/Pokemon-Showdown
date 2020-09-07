@@ -78,6 +78,14 @@ describe('Users features', function () {
 			});
 		});
 		describe('User', function () {
+			it('should store IP addresses after disconnect', () => {
+				const conn = new Connection('127.0.0.1');
+				const user = new User(conn);
+				assert.deepStrictEqual(['127.0.0.1'], user.ips);
+				user.onDisconnect(conn);
+				assert.deepStrictEqual(['127.0.0.1'], user.ips);
+			});
+
 			describe('#disconnectAll', function () {
 				for (const totalConnections of [1, 2]) {
 					it('should drop all ' + totalConnections + ' connection(s) and mark as inactive', function () {
@@ -136,14 +144,6 @@ describe('Users features', function () {
 					await Punishments.ban(users[0]);
 					assert.equal(users[1].connected, true);
 				});
-
-				it('should update IP count properly', async function () {
-					const user = new User();
-					await Punishments.ban(user);
-					for (const ip in user.ips) {
-						assert.equal(user.ips[ip], 0);
-					}
-				});
 			});
 
 			describe('#can', function () {
@@ -159,15 +159,15 @@ describe('Users features', function () {
 				});
 				it(`should allow 'u' permissions on lower ranked users`, function () {
 					const user = new User();
-					user.group = '@';
+					user.tempGroup = '@';
 					assert.equal(user.can('globalban', user), false, 'targeting self');
 
 					const target = new User();
-					target.group = ' ';
+					target.tempGroup = ' ';
 					assert.equal(user.can('globalban', target), true, 'targeting lower rank');
-					target.group = '@';
+					target.tempGroup = '@';
 					assert.equal(user.can('globalban', target), false, 'targeting same rank');
-					target.group = '&';
+					target.tempGroup = '&';
 					assert.equal(user.can('globalban', target), false, 'targeting higher rank');
 				});
 				it(`should not allow users to demote themselves`, function () {

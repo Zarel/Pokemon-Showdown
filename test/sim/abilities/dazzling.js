@@ -29,6 +29,6 @@ describe('Dazzling', function () {
 		battle.makeChoices('move swordsdance', 'move perishsong');
 		battle.makeChoices('move sleeptalk', 'move haze');
 		assert.equal(battle.p1.active[0].boosts.atk, 0);
-		assert.false(battle.p1.active[0].volatiles.perishsong);
+		assert.false(battle.p1.active[0].volatiles['perishsong']);
 	});
 });

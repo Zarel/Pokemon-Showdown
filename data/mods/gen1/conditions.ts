@@ -138,8 +138,8 @@ export const Conditions: {[k: string]: ModdedConditionData} = {
 		},
 		onBeforeMovePriority: 3,
 		onBeforeMove(pokemon, target) {
-			pokemon.volatiles.confusion.time--;
-			if (!pokemon.volatiles.confusion.time) {
+			pokemon.volatiles['confusion'].time--;
+			if (!pokemon.volatiles['confusion'].time) {
 				pokemon.removeVolatile('confusion');
 				return;
 			}
@@ -227,6 +227,11 @@ export const Conditions: {[k: string]: ModdedConditionData} = {
 		inherit: true,
 		durationCallback() {
 			return this.random(3, 5);
+		},
+		onEnd(target) {
+			// Confusion begins even if already confused
+			delete target.volatiles['confusion'];
+			target.addVolatile('confusion');
 		},
 	},
 	stall: {

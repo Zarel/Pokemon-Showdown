@@ -152,7 +152,6 @@ Staff
 
 - Andrew Werner [HoeenHero] - Development
 - Chris Monsanto [chaos] - Sysadmin
-- Kirk Scheibelhut [pre] - Development, Sysadmin
 - Mathieu Dias-Martins [Marty-D] - Research (game mechanics), Development
 - [The Immortal] - Development
 
@@ -167,7 +166,6 @@ Retired Staff
 
 Major Contributors
 
-- [Anubis, Lusamine] - Research (game mechanics), Sysadmin
 - Austin Couturier [Austin] - Development (damage calculator)
 - Kevin Lau [Ascriptmaster] - Development, Art (battle animations)
 - Konrad Borowski [xfix] - Development

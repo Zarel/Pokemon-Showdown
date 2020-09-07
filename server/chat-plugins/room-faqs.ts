@@ -30,8 +30,8 @@ function getAlias(roomid: RoomID, key: string) {
 
 export const commands: ChatCommands = {
 	addfaq(target, room, user, connection) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('ban', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('ban', null, room);
 		if (!room.persist) return this.errorReply("This command is unavailable in temporary rooms.");
 		if (!target) return this.parse('/help roomfaq');
 
@@ -58,9 +58,9 @@ export const commands: ChatCommands = {
 		this.modlog('RFAQ', null, `added '${topic}'`);
 	},
 	removefaq(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.canTalk()) return this.errorReply("You cannot do this while unable to talk.");
-		if (!this.can('ban', null, room)) return false;
+		room = this.requireRoom();
+		this.checkChat();
+		this.checkCan('ban', null, room);
 		if (!room.persist) return this.errorReply("This command is unavailable in temporary rooms.");
 		const topic = toID(target);
 		if (!topic) return this.parse('/help roomfaq');
@@ -68,9 +68,9 @@ export const commands: ChatCommands = {
 		if (!(roomFaqs[room.roomid] && roomFaqs[room.roomid][topic])) return this.errorReply("Invalid topic.");
 		delete roomFaqs[room.roomid][topic];
 		Object.keys(roomFaqs[room.roomid]).filter(
-			val => getAlias(room.roomid, val) === topic
+			val => getAlias(room!.roomid, val) === topic
 		).map(
-			val => delete roomFaqs[room.roomid][val]
+			val => delete roomFaqs[room!.roomid][val]
 		);
 		if (!Object.keys(roomFaqs[room.roomid]).length) delete roomFaqs[room.roomid];
 		saveRoomFaqs();
@@ -78,9 +78,9 @@ export const commands: ChatCommands = {
 		this.modlog('ROOMFAQ', null, `removed ${topic}`);
 	},
 	addalias(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.canTalk()) return this.errorReply("You cannot do this while unable to talk.");
-		if (!this.can('ban', null, room)) return false;
+		room = this.requireRoom();
+		this.checkChat();
+		this.checkCan('ban', null, room);
 		if (!room.persist) return this.errorReply("This command is unavailable in temporary rooms.");
 		const [alias, topic] = target.split(',').map(val => toID(val));
 
@@ -101,12 +101,12 @@ export const commands: ChatCommands = {
 	viewfaq: 'roomfaq',
 	rfaq: 'roomfaq',
 	roomfaq(target, room, user, connection, cmd) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!roomFaqs[room.roomid]) return this.errorReply("This room has no FAQ topics.");
 		let topic: string = toID(target);
 		if (topic === 'constructor') return false;
 		if (!topic) {
-			return this.sendReplyBox(`List of topics in this room: ${Object.keys(roomFaqs[room.roomid]).filter(val => !getAlias(room.roomid, val)).sort((a, b) => a.localeCompare(b)).map(rfaq => `<button class="button" name="send" value="/viewfaq ${rfaq}">${rfaq}</button>`).join(', ')}`);
+			return this.sendReplyBox(`List of topics in this room: ${Object.keys(roomFaqs[room.roomid]).filter(val => !getAlias(room!.roomid, val)).sort((a, b) => a.localeCompare(b)).map(rfaq => `<button class="button" name="send" value="/viewfaq ${rfaq}">${rfaq}</button>`).join(', ')}`);
 		}
 		if (!roomFaqs[room.roomid][topic]) return this.errorReply("Invalid topic.");
 		topic = getAlias(room.roomid, topic) || topic;
@@ -117,7 +117,7 @@ export const commands: ChatCommands = {
 		if (!this.broadcasting && user.can('ban', null, room) && cmd !== 'viewfaq') {
 			const src = Utils.escapeHTML(roomFaqs[room.roomid][topic]).replace(/\n/g, `<br />`);
 			let extra = `<code>/addfaq ${topic}, ${src}</code>`;
-			const aliases = Object.keys(roomFaqs[room.roomid]).filter(val => getAlias(room.roomid, val) === topic);
+			const aliases = Object.keys(roomFaqs[room.roomid]).filter(val => getAlias(room!.roomid, val) === topic);
 			if (aliases.length) {
 				extra += `<br /><br />Aliases: ${aliases.join(', ')}`;
 			}

@@ -82,7 +82,7 @@ describe('Trivia', function () {
 		const name = this.user.name;
 		this.game.addTriviaPlayer(this.user);
 		this.user.forceRename('Not Morfent', true);
-		this.user.prevNames[userid] = name;
+		this.user.previousIDs.push(userid);
 
 		const user2 = makeUser(name, new Connection('127.0.0.3'));
 		this.game.addTriviaPlayer(user2);
@@ -115,9 +115,8 @@ describe('Trivia', function () {
 		this.game.kick(this.tarUser, this.user);
 
 		const userid = this.tarUser.id;
-		const name = this.tarUser.name;
 		this.tarUser.forceRename('Not Morfent', true);
-		this.tarUser.prevNames[userid] = name;
+		this.tarUser.previousIDs.push(userid);
 		this.game.addTriviaPlayer(this.tarUser);
 		assert.equal(this.game.playerCount, 0);
 	});

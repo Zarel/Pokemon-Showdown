@@ -246,6 +246,16 @@ export const Utils = new class Utils {
 		}
 	}
 
+	deepClone(obj: any): any {
+		if (obj === null || typeof obj !== 'object') return obj;
+		if (Array.isArray(obj)) return obj.map(prop => this.deepClone(prop));
+		const clone = Object.create(Object.getPrototypeOf(obj));
+		for (const key of Object.keys(obj)) {
+			clone[key] = this.deepClone(obj[key]);
+		}
+		return clone;
+	}
+
 	levenshtein(s: string, t: string, l: number): number {
 		// Original levenshtein distance function by James Westgate, turned out to be the fastest
 		const d: number[][] = [];

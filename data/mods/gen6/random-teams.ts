@@ -8,7 +8,6 @@ import {toID} from '../../../sim/dex';
 export class RandomGen6Teams extends RandomGen7Teams {
 	constructor(format: Format | string, prng: PRNG | PRNGSeed | null) {
 		super(format, prng);
-		this.randomFactorySets = require('./factory-sets.json');
 	}
 
 	randomSet(species: string | Species, teamDetails: RandomTeamsTypes.TeamDetails = {}, isLead = false): RandomTeamsTypes.RandomSet {
@@ -893,6 +892,8 @@ export class RandomGen6Teams extends RandomGen7Teams {
 			shiny: this.randomChance(1, 1024),
 		};
 	}
+
+	randomFactorySets: AnyObject = require('./factory-sets.json');
 
 	randomFactorySet(species: Species, teamData: RandomTeamsTypes.FactoryTeamDetails, tier: string): RandomTeamsTypes.RandomFactorySet | null {
 		const id = toID(species.name);

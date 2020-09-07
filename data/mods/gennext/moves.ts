@@ -194,7 +194,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			},
 			onTryHitPriority: 3,
 			onTryHit(target, source, move) {
-				if (target.volatiles.substitute || !move.flags['protect']) return;
+				if (target.volatiles['substitute'] || !move.flags['protect']) return;
 				this.add('-activate', target, 'Protect');
 				const lockedmove = source.getVolatile('lockedmove');
 				if (lockedmove) {
@@ -216,7 +216,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			},
 			onTryHitPriority: 3,
 			onTryHit(target, source, move) {
-				if (target.volatiles.substitute || !move.flags['protect'] || move.category === 'Status') return;
+				if (target.volatiles['substitute'] || !move.flags['protect'] || move.category === 'Status') return;
 				this.add('-activate', target, 'Protect');
 				const lockedmove = source.getVolatile('lockedmove');
 				if (lockedmove) {
@@ -241,7 +241,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			},
 			onTryHitPriority: 3,
 			onTryHit(target, source, move) {
-				if (target.volatiles.substitute || !move.flags['protect']) return;
+				if (target.volatiles['substitute'] || !move.flags['protect']) return;
 				if (move && (move.target === 'self' || move.id === 'suckerpunch')) return;
 				this.add('-activate', target, 'move: Protect');
 				if (move.flags['contact']) {

@@ -6,13 +6,10 @@ import {Utils} from '../../../lib/utils';
 import {toID} from '../../../sim/dex';
 
 export class RandomGen7Teams extends RandomTeams {
-	randomFactorySets: AnyObject;
-	randomBSSFactorySets: AnyObject;
 	constructor(format: Format | string, prng: PRNG | PRNGSeed | null) {
 		super(format, prng);
-		this.randomFactorySets = require('./factory-sets.json');
-		this.randomBSSFactorySets = require('./bss-factory-sets.json');
 	}
+
 	randomSet(species: string | Species, teamDetails: RandomTeamsTypes.TeamDetails = {}, isLead = false, isDoubles = false): RandomTeamsTypes.RandomSet {
 		species = this.dex.getSpecies(species);
 		let forme = species.name;
@@ -1207,6 +1204,8 @@ export class RandomGen7Teams extends RandomTeams {
 		return pokemon;
 	}
 
+	randomFactorySets: AnyObject = require('./factory-sets.json');
+
 	randomFactorySet(
 		species: Species, teamData: RandomTeamsTypes.FactoryTeamDetails, tier: string
 	): RandomTeamsTypes.RandomFactorySet | null {
@@ -1498,6 +1497,8 @@ export class RandomGen7Teams extends RandomTeams {
 
 		return pokemon;
 	}
+
+	randomBSSFactorySets: AnyObject = require('./bss-factory-sets.json');
 
 	randomBSSFactorySet(
 		species: Species, teamData: RandomTeamsTypes.FactoryTeamDetails

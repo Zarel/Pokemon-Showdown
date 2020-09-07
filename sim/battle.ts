@@ -3235,7 +3235,7 @@ export class Battle {
 			}
 		}
 		for (const action of this.queue.list) {
-			delete action.pokemon;
+			delete (action as any).pokemon;
 		}
 
 		this.queue.battle = null!;

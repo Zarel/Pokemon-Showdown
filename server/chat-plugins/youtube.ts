@@ -172,14 +172,14 @@ const YouTube = new YoutubeInterface(channelData);
 
 export const commands: ChatCommands = {
 	async randchannel(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
 		if (Object.keys(channelData).length < 1) return this.errorReply(`No channels in the database.`);
 		this.runBroadcast();
 		const data = await YouTube.randChannel();
 		if (!data) return this.errorReply(`Error in getting channel data.`);
 		if (this.broadcasting) {
-			if (!this.can('show', null, room)) return false;
+			this.checkCan('show', null, room);
 			this.addBox(data);
 			room.update();
 		} else {
@@ -191,10 +191,10 @@ export const commands: ChatCommands = {
 	yt: 'youtube',
 	youtube: {
 		async addchannel(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
 			let [id, name] = target.split(',');
-			name = name.trim();
+			if (name) name = name.trim();
 			if (!id) return this.errorReply('Specify a channel ID.');
 			const data = await YouTube.getChannelData(id, name);
 			if (!data) {
@@ -206,9 +206,9 @@ export const commands: ChatCommands = {
 		addchannelhelp: [`/addchannel - Add channel data to the YouTube database. Requires: % @ #`],
 
 		removechannel(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
-			if (!this.can('mute', null, room)) return false;
+			this.checkCan('mute', null, room);
 			const id = YouTube.channelSearch(target);
 			if (!id) return this.errorReply(`Channel with ID or name ${target} not found.`);
 			delete YouTube.data[id];
@@ -219,7 +219,7 @@ export const commands: ChatCommands = {
 		removechannelhelp: [`/youtube removechannel - Delete channel data from the YouTube database. Requires: % @ #`],
 
 		async channel(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
 			const channel = YouTube.channelSearch(target);
 			if (!channel) return this.errorReply(`No channels with ID or name ${target} found.`);
@@ -237,7 +237,7 @@ export const commands: ChatCommands = {
 			'/youtube channel - View the data of a specified channel. Can be either channel ID or channel name.',
 		],
 		async video(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
 			if (!target) return this.errorReply(`Provide a valid youtube link.`);
 			const html = await YouTube.generateVideoDisplay(target);
@@ -262,9 +262,9 @@ export const commands: ChatCommands = {
 		},
 
 		update(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
-			if (!this.can('mute', null, room)) return false;
+			this.checkCan('mute', null, room);
 			const [channel, name] = target.split(',');
 			const id = YouTube.channelSearch(channel);
 			if (!id) return this.errorReply(`Channel ${channel} is not in the database.`);
@@ -275,9 +275,9 @@ export const commands: ChatCommands = {
 		},
 		interval: 'repeat',
 		async repeat(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (room.roomid !== 'youtube') return this.errorReply(`This command can only be used in the YouTube room.`);
-			if (!this.can('declare', null, room)) return false;
+			this.checkCan('declare', null, room);
 			if (!target) return this.sendReply(`Interval is currently set to ${Chat.toDurationString(YouTube.intervalTime)}.`);
 			if (Object.keys(channelData).length < 1) return this.errorReply(`No channels in the database.`);
 			if (isNaN(parseInt(target))) return this.errorReply(`Specify a number (in minutes) for the interval.`);
@@ -291,6 +291,7 @@ export const commands: ChatCommands = {
 			if (YouTube.interval) clearInterval(YouTube.interval);
 			YouTube.interval = setInterval(() => {
 				void (async () => {
+					if (!room) return; // do nothing if the room doesn't exist anymore
 					const res = await YouTube.randChannel();
 					this.addBox(res!);
 					room.update();

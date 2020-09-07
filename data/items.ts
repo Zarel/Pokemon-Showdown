@@ -886,7 +886,7 @@ export const Items: {[itemid: string]: ItemData} = {
 		},
 		onStart(pokemon) {
 			if (pokemon.volatiles['choicelock']) {
-				this.debug('removing choicelock: ' + pokemon.volatiles.choicelock);
+				this.debug('removing choicelock: ' + pokemon.volatiles['choicelock']);
 			}
 			pokemon.removeVolatile('choicelock');
 		},
@@ -911,7 +911,7 @@ export const Items: {[itemid: string]: ItemData} = {
 		},
 		onStart(pokemon) {
 			if (pokemon.volatiles['choicelock']) {
-				this.debug('removing choicelock: ' + pokemon.volatiles.choicelock);
+				this.debug('removing choicelock: ' + pokemon.volatiles['choicelock']);
 			}
 			pokemon.removeVolatile('choicelock');
 		},
@@ -935,7 +935,7 @@ export const Items: {[itemid: string]: ItemData} = {
 		},
 		onStart(pokemon) {
 			if (pokemon.volatiles['choicelock']) {
-				this.debug('removing choicelock: ' + pokemon.volatiles.choicelock);
+				this.debug('removing choicelock: ' + pokemon.volatiles['choicelock']);
 			}
 			pokemon.removeVolatile('choicelock');
 		},
@@ -1232,7 +1232,7 @@ export const Items: {[itemid: string]: ItemData} = {
 		onAttract(target, source) {
 			this.debug('attract intercepted: ' + target + ' from ' + source);
 			if (!source || source === target) return;
-			if (!source.volatiles.attract) source.addVolatile('attract', target);
+			if (!source.volatiles['attract']) source.addVolatile('attract', target);
 		},
 		num: 280,
 		gen: 4,

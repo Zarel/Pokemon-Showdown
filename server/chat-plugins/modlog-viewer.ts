@@ -38,6 +38,12 @@ const LINES_SEPARATOR = 'lines=';
 const MAX_RESULTS_LENGTH = MORE_BUTTON_INCREMENTS[MORE_BUTTON_INCREMENTS.length - 1];
 const IPS_REGEX = /[([]([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})[)\]]/g;
 
+const ALIASES: {[k: string]: string} = {
+	'helpticket': 'help-rooms',
+	'groupchat': 'groupchat-rooms',
+	'battle': 'battle-rooms',
+};
+
 /*********************************************************
  * Modlog Functions
  *********************************************************/
@@ -59,6 +65,18 @@ function getMoreButton(
 		if (useExactSearch) search = Utils.escapeHTML(`"${search}"`);
 		return `<br /><div style="text-align:center"><button class="button" name="send" value="/${onlyPunishments ? 'punish' : 'mod'}log ${roomid}, ${search} ${LINES_SEPARATOR}${newLines}" title="View more results">Older results<br />&#x25bc;</button></div>`;
 	}
+}
+
+function getRoomID(id: string) {
+	if (id in ALIASES) return ALIASES[id] as ModlogID;
+	return id as ModlogID;
+}
+
+function getAlias(id: string) {
+	for (const [alias, value] of Object.entries(ALIASES)) {
+		if (id === value) return alias as ModlogID;
+	}
+	return id as ModlogID;
 }
 
 function prettifyResults(
@@ -135,7 +153,8 @@ function prettifyResults(
 		preamble = `>view-modlog-${modlogid}\n|init|html\n|title|[Modlog]${title}\n` +
 			`|pagehtml|<div class="pad"><p>The last ${Chat.count(lines, `${scope}lines`)} of the Moderator Log of ${roomName}.`;
 	}
-	const moreButton = getMoreButton(roomid, searchString, exactSearch, lines, maxLines, onlyPunishments);
+
+	const moreButton = getMoreButton(getAlias(roomid), searchString, exactSearch, lines, maxLines, onlyPunishments);
 	return `${preamble}${resultString}${moreButton}</div>`;
 }
 
@@ -145,6 +164,7 @@ async function getModlog(
 ) {
 	const targetRoom = Rooms.search(roomid);
 	const user = connection.user;
+	roomid = getRoomID(roomid);
 
 	// permission checking
 	if (roomid === 'all' || roomid === 'public') {
@@ -159,7 +179,7 @@ async function getModlog(
 
 	const hideIps = !user.can('lock');
 	const addModlogLinks = !!(
-		Config.modloglink && (user.group !== ' ' || (targetRoom && targetRoom.settings.isPrivate !== true))
+		Config.modloglink && (user.tempGroup !== ' ' || (targetRoom && targetRoom.settings.isPrivate !== true))
 	);
 	if (hideIps && /^\["']?[?[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]?["']?$/.test(searchString)) {
 		connection.popup(`You cannot search for IPs.`);
@@ -298,7 +318,7 @@ export const pages: PageTable = {
 	},
 	async battlesearch(args, user, connection) {
 		if (!user.named) return Rooms.RETRY_AFTER_LOGIN;
-		if (!this.can('forcewin')) return;
+		this.checkCan('forcewin');
 		const userid = toID(args.shift());
 		const turnLimit = parseInt(args.shift()!);
 		if (!userid || !turnLimit || turnLimit < 1) {
@@ -465,7 +485,7 @@ export const commands: ChatCommands = {
 
 	battlesearch(target, room, user, connection) {
 		if (!target.trim()) return this.parse('/help battlesearch');
-		if (!this.can('forcewin')) return;
+		this.checkCan('forcewin');
 
 		const userid = toID(target.split(',')[0]);
 		let turnLimit = parseInt(target.split(',')[1]);

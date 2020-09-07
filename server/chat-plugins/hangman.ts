@@ -208,14 +208,14 @@ export const commands: ChatCommands = {
 	hangman: {
 		create: 'new',
 		new(target, room, user, connection) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			const text = this.filter(target);
 			if (target !== text) return this.errorReply("You are not allowed to use filtered words in hangmans.");
 			const params = text.split(',');
 
-			if (!this.can('minigame', null, room)) return false;
+			this.checkCan('minigame', null, room);
 			if (room.settings.hangmanDisabled) return this.errorReply("Hangman is disabled for this room.");
-			if (!this.canTalk()) return;
+			this.checkChat();
 			if (room.game) return this.errorReply(`There is already a game of ${room.game.title} in progress in this room.`);
 
 			if (!params) return this.errorReply("No word entered.");
@@ -243,11 +243,11 @@ export const commands: ChatCommands = {
 		createhelp: ["/hangman create [word], [hint] - Makes a new hangman game. Requires: % @ # &"],
 
 		guess(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (!target) return this.parse('/help guess');
 			const game = room.getGame(Hangman);
 			if (!game) return this.errorReply("There is no game of hangman running in this room.");
-			if (!this.canTalk()) return;
+			this.checkChat();
 
 			game.guess(target, user);
 		},
@@ -258,9 +258,9 @@ export const commands: ChatCommands = {
 
 		stop: 'end',
 		end(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('minigame', null, room)) return false;
-			if (!this.canTalk()) return;
+			room = this.requireRoom();
+			this.checkCan('minigame', null, room);
+			this.checkChat();
 			const game = room.getGame(Hangman);
 			if (!game) return this.errorReply("There is no game of hangman running in this room.");
 
@@ -271,8 +271,8 @@ export const commands: ChatCommands = {
 		endhelp: ["/hangman end - Ends the game of hangman before the man is hanged or word is guessed. Requires: % @ # &"],
 
 		disable(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('gamemanagement', null, room)) return;
+			room = this.requireRoom();
+			this.checkCan('gamemanagement', null, room);
 			if (room.settings.hangmanDisabled) {
 				return this.errorReply("Hangman is already disabled.");
 			}
@@ -282,8 +282,8 @@ export const commands: ChatCommands = {
 		},
 
 		enable(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('gamemanagement', null, room)) return;
+			room = this.requireRoom();
+			this.checkCan('gamemanagement', null, room);
 			if (!room.settings.hangmanDisabled) {
 				return this.errorReply("Hangman is already enabled.");
 			}
@@ -293,7 +293,7 @@ export const commands: ChatCommands = {
 		},
 
 		display(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			const game = room.getGame(Hangman);
 			if (!game) return this.errorReply("There is no game of hangman running in this room.");
 			if (!this.runBroadcast()) return;
@@ -319,10 +319,10 @@ export const commands: ChatCommands = {
 	],
 
 	guess(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(Hangman);
 		if (!game) return this.errorReply("There is no game of hangman running in this room.");
-		if (!this.canTalk()) return;
+		this.checkChat();
 
 		game.guess(target, user);
 	},

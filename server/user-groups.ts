@@ -15,7 +15,7 @@ export const GLOBAL_PERMISSIONS = [
 	// administrative
 	'bypassall', 'console', 'disableladder', 'lockdown', 'potd', 'rawpacket',
 	// other
-	'addhtml', 'alts', 'altsself', 'autotimer', 'globalban', 'bypassblocks', 'bypassafktimer', 'forcepromote', 'forcerename', 'forcewin', 'gdeclare', 'ignorelimits', 'importinputlog', 'ip', 'ipself', 'lock', 'makeroom', 'modlog', 'rangeban', 'promote',
+	'addhtml', 'alts', 'altsself', 'autotimer', 'globalban', 'bypassblocks', 'bypassafktimer', 'forcepromote', 'forcerename', 'forcewin', 'gdeclare', 'hiderank', 'ignorelimits', 'importinputlog', 'ip', 'ipself', 'lock', 'makeroom', 'modlog', 'rangeban', 'promote',
 ] as const;
 
 export type RoomPermission = typeof ROOM_PERMISSIONS[number];
@@ -50,16 +50,15 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 	 *
 	 * Passing a User will read `user.group`, which is relevant for unregistered
 	 * users with temporary global auth.
-	 * @param isVisual: Whether or not to display the user's visual (display) group. Defaults to false
 	 */
-	get(user: ID | User, isVisual?: boolean) {
-		if (typeof user !== 'string') return (isVisual ? (user as User).visualGroup : (user as User).group);
-		return (isVisual ? Users.get(user)?.visualGroup : super.get(user)) || Auth.defaultSymbol();
+	get(user: ID | User) {
+		if (typeof user !== 'string') return (user as User).tempGroup;
+		return super.get(user) || Auth.defaultSymbol();
 	}
 	isStaff(userid: ID) {
 		return this.has(userid) && this.get(userid) !== '+';
 	}
-	atLeast(user: User, group: AuthLevel, isPermissionCheck?: boolean) {
+	atLeast(user: User, group: AuthLevel) {
 		if (user.hasSysopAccess()) return true;
 		if (group === 'trusted' || group === 'autoconfirmed') {
 			if (user.trusted && group === 'trusted') return true;
@@ -70,13 +69,7 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 		if (group === 'unlocked') return true;
 		if (!Config.groups[group]) return false;
 		if (this.get(user.id) === ' ' && group !== ' ') return false;
-		if (Auth.atLeast(this.get(user.id, true), group)) {
-			return true;
-		} else if (Auth.atLeast(this.get(user.id, false), group)) {
-			// Reset a user's visualGroup if they need their true group for a permissions check
-			if (isPermissionCheck) user.resetVisualGroup();
-			return true;
-		}
+		return Auth.atLeast(this.get(user.id), group);
 	}
 
 	static defaultSymbol() {
@@ -96,8 +89,8 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 			name: symbol,
 		});
 	}
-	getEffectiveSymbol(user: User, isVisual?: boolean): EffectiveGroupSymbol {
-		const group = this.get(user, isVisual);
+	getEffectiveSymbol(user: User): EffectiveGroupSymbol {
+		const group = this.get(user);
 		if (this.has(user.id) && group === Auth.defaultSymbol()) {
 			return 'whitelist';
 		}
@@ -107,15 +100,14 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 		user: User,
 		permission: string,
 		target: User | EffectiveGroupSymbol | null,
-		room?: Room | BasicRoom | null,
-		cmd?: string,
-		useVisualGroup?: boolean
+		room?: BasicRoom | null,
+		cmd?: string
 	): boolean {
 		if (user.hasSysopAccess()) return true;
 
 		const auth: Auth = room ? room.auth : Users.globalAuth;
 
-		const symbol = auth.getEffectiveSymbol(user, useVisualGroup);
+		const symbol = auth.getEffectiveSymbol(user);
 		let targetSymbol = (typeof target === 'string' || !target) ? target : auth.get(target);
 		if (!targetSymbol || ['whitelist', 'trusted', 'autoconfirmed'].includes(targetSymbol)) {
 			targetSymbol = Auth.defaultSymbol();
@@ -130,15 +122,27 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 		}
 		const roomPermissions = room ? room.settings.permissions : null;
 		if (roomPermissions) {
-			if (cmd && roomPermissions[`/${cmd}`]) {
-				if (!auth.atLeast(user, roomPermissions[`/${cmd}`])) return false;
-				jurisdiction = 'su';
-			} else if (roomPermissions[permission]) {
+			let foundSpecificPermission = false;
+			if (cmd) {
+				const namespace = cmd.slice(0, cmd.indexOf(' '));
+				if (roomPermissions[`/${cmd}`]) {
+					// this checks sub commands and command objects, but it checks to see if a sub-command
+					// overrides (should a perm for the command object exist) first
+					if (!auth.atLeast(user, roomPermissions[`/${cmd}`])) return false;
+					jurisdiction = 'su';
+					foundSpecificPermission = true;
+				} else if (roomPermissions[`/${namespace}`]) {
+					// if it's for one command object
+					if (!auth.atLeast(user, roomPermissions[`/${namespace}`])) return false;
+					jurisdiction = 'su';
+					foundSpecificPermission = true;
+				}
+			}
+			if (!foundSpecificPermission && roomPermissions[permission]) {
 				if (!auth.atLeast(user, roomPermissions[permission])) return false;
-				jurisdiction = 'su';
+				jurisdiction = 'u';
 			}
 		}
-
 		return Auth.hasJurisdiction(symbol, jurisdiction, targetSymbol as GroupSymbol);
 	}
 	static atLeast(symbol: EffectiveGroupSymbol, symbol2: EffectiveGroupSymbol) {
@@ -153,6 +157,7 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 				permissions.push(`/${cmd}`);
 			}
 			if (typeof entry === 'object') {
+				permissions.push(`/${cmd}`);
 				for (const subCommand in entry) {
 					const subEntry = (entry as Chat.AnnotatedChatCommands)[subCommand];
 					if (typeof subEntry !== 'function') continue;
@@ -207,10 +212,10 @@ export class RoomAuth extends Auth {
 		super();
 		this.room = room;
 	}
-	get(user: ID | User, isVisual?: boolean): GroupSymbol {
+	get(user: ID | User): GroupSymbol {
 		const parentAuth: Auth | null = this.room.parent ? this.room.parent.auth :
 			this.room.settings.isPrivate !== true ? Users.globalAuth : null;
-		const parentGroup = parentAuth ? parentAuth.get(user, isVisual) : Auth.defaultSymbol();
+		const parentGroup = parentAuth ? parentAuth.get(user) : Auth.defaultSymbol();
 		const id = typeof user === 'string' ? user : (user as User).id;
 
 		if (this.has(id)) {
@@ -234,9 +239,9 @@ export class RoomAuth extends Auth {
 
 		return parentGroup;
 	}
-	getEffectiveSymbol(user: User, isVisual?: boolean) {
-		const symbol = super.getEffectiveSymbol(user, isVisual);
-		if (!this.room.persist && symbol === user.group) {
+	getEffectiveSymbol(user: User) {
+		const symbol = super.getEffectiveSymbol(user);
+		if (!this.room.persist && symbol === user.tempGroup) {
 			const replaceGroup = Auth.getGroup(symbol).globalGroupInPersonalRoom;
 			if (replaceGroup) return replaceGroup;
 		}
@@ -310,9 +315,7 @@ export class GlobalAuth extends Auth {
 		if (!username) username = id;
 		const user = Users.get(id);
 		if (user) {
-			const isHidingGroup = user.group !== user.visualGroup;
-			user.group = group;
-			if (!isHidingGroup) user.setVisualGroup(group);
+			user.tempGroup = group;
 			user.updateIdentity();
 			username = user.name;
 		}
@@ -326,8 +329,7 @@ export class GlobalAuth extends Auth {
 		super.delete(id);
 		const user = Users.get(id);
 		if (user) {
-			user.group = ' ';
-			user.visualGroup = ' ';
+			user.tempGroup = ' ';
 		}
 		this.usernames.delete(id);
 		this.save();

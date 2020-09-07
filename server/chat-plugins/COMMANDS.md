@@ -118,17 +118,17 @@ Commands have access to the following functions:
 *   Adds a log line into the room's modlog, similar to `this.globalModlog`.
     The arguments `user` (the targeted user), `note` (details), and `options` (no ip, no alts) are optional.
 
-`this.can(permission)`  
-`this.can(permission, targetUser)`
+`this.checkCan(permission)`  
+`this.checkCan(permission, targetUser)`
 *	Checks if the user has the permission to do something, or if a
 	targetUser is passed, check if the user has permission to do it to that
-	user. Will automatically give the user an "Access denied" message if
+	user. Will automatically give the user an "Access denied" message, and stop the command there, if
 	the user doesn't have permission: use `user.can()` if you don't want that
-	message.
+	message. 
 
 	Should usually be near the top of the command, like:
 
-		if (!this.can('potd')) return false;
+		this.checkCan('potd');
 
 `this.runBroadcast()`
 *	Signifies that a message can be broadcast, as long as the user has
@@ -142,33 +142,33 @@ Commands have access to the following functions:
 
 	Should usually be near the top of the command, like:
 
-		if (!this.canBroadcast()) return false;
+		this.checkBroadcast();
 
 `this.runBroadcast(suppressMessage)`
 *	Functionally the same as `this.canBroadcast()`. However, it will look as
 	if the user had written the text `suppressMessage`.
 
-`this.canTalk()`
+`this.checkChat()`
 *	Checks to see if the user can speak in the room. Returns false if the
 	user can't speak (is muted, the room has modchat on, etc), or true
 	otherwise.
 
 	Should usually be near the top of the command, like:
 
-		if (!this.canTalk()) return false;
+		this.checkChat();
 
-`this.canTalk(message, room)`
+`this.checkChat(message, room)`
 *	Checks to see if the user can say the message in the room.
 	If a room is not specified, it will default to the current one.
 	If it has a falsy value, the check won't be attached to any room.
-	In addition to running the checks from `this.canTalk()`, it also checks
+	In addition to running the checks from `this.checkChat()`, it also checks
 	to see if the message has any banned words, is too long, or was just
 	sent by the user. Returns the filtered message, or a falsy value if the
 	user can't speak.
 
 	Should usually be near the top of the command, like:
 
-		target = this.canTalk(target);
+		target = this.checkChat(target);
 		if (!target) return false;
 
 `this.parse(message, inNamespace)`

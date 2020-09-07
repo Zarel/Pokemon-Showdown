@@ -228,9 +228,9 @@ represented by a space), and the rest of the string being their username.
 > You just connected to the server, and we're giving you some information you'll need to log in.
 >
 > If you're already logged in and have session cookies, you can make an HTTP GET request to
-> `http://play.pokemonshowdown.com/action.php?act=upkeep&challstr=CHALLSTR`
+> `https://play.pokemonshowdown.com/action.php?act=upkeep&challstr=CHALLSTR`
 >
-> Otherwise, you'll need to make an HTTP POST request to `http://play.pokemonshowdown.com/action.php`
+> Otherwise, you'll need to make an HTTP POST request to `https://play.pokemonshowdown.com/action.php`
 > with the data `act=login&name=USERNAME&pass=PASSWORD&challstr=CHALLSTR`
 >
 > `USERNAME` is your username and `PASSWORD` is your password, and `CHALLSTR`

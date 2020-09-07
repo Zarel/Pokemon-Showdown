@@ -597,7 +597,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		inherit: true,
 		onResidualPriority: -1,
 		onResidual(pokemon) {
-			if (pokemon.activeTurns && !pokemon.volatiles.stall) {
+			if (pokemon.activeTurns && !pokemon.volatiles['stall']) {
 				this.boost({spe: 1});
 			}
 		},
@@ -677,7 +677,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		onFoeMaybeTrapPokemon(pokemon, source) {
 			if (!source) source = this.effectData.target;
 			if (!source || !this.isAdjacent(pokemon, source)) return;
-			if (pokemon.ability !== 'shadowtag' && !source.volatiles.shadowtag) {
+			if (pokemon.ability !== 'shadowtag' && !source.volatiles['shadowtag']) {
 				pokemon.maybeTrapped = true;
 			}
 		},

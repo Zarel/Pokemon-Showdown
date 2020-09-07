@@ -127,8 +127,8 @@ export const commands: ChatCommands = {
 		} else if (megaSpecies.types[1] !== baseSpecies.types[1]) {
 			deltas.type = megaSpecies.types[1];
 		}
-		const mixedSpecies = Dex.deepClone(species);
-		mixedSpecies.abilities = Dex.deepClone(megaSpecies.abilities);
+		const mixedSpecies = Utils.deepClone(species);
+		mixedSpecies.abilities = Utils.deepClone(megaSpecies.abilities);
 		if (mixedSpecies.types[0] === deltas.type) { // Add any type gains
 			mixedSpecies.types = [deltas.type];
 		} else if (deltas.type === 'mono') {
@@ -287,7 +287,7 @@ export const commands: ChatCommands = {
 			const format = Dex.getFormat(room.battle.format);
 			dex = Dex.mod(format.mod);
 		}
-		const species = Dex.deepClone(dex.getSpecies(args[0]));
+		const species = Utils.deepClone(dex.getSpecies(args[0]));
 		if (!species.exists || species.gen > dex.gen) {
 			const monName = species.gen > dex.gen ? species.name : args[0].trim();
 			const additionalReason = species.gen > dex.gen ? ` in Generation ${dex.gen}` : ``;
@@ -328,7 +328,7 @@ export const commands: ChatCommands = {
 			const format = Dex.getFormat(room.battle.format);
 			dex = Dex.mod(format.mod);
 		}
-		const species = Dex.deepClone(dex.getSpecies(args[0]));
+		const species = Utils.deepClone(dex.getSpecies(args[0]));
 		if (!species.exists || species.gen > dex.gen) {
 			const monName = species.gen > dex.gen ? species.name : args[0].trim();
 			const additionalReason = species.gen > dex.gen ? ` in Generation ${dex.gen}` : ``;
@@ -386,7 +386,7 @@ export const commands: ChatCommands = {
 			const format = Dex.getFormat(room.battle.format);
 			dex = Dex.mod(format.mod);
 		}
-		const species = Dex.deepClone(dex.getSpecies(args[0]));
+		const species = Utils.deepClone(dex.getSpecies(args[0]));
 		if (!species.exists || species.gen > dex.gen) {
 			const monName = species.gen > dex.gen ? species.name : args[0].trim();
 			const additionalReason = species.gen > dex.gen ? ` in Generation ${dex.gen}` : ``;
@@ -432,7 +432,7 @@ export const commands: ChatCommands = {
 		} else if (room?.battle) {
 			dex = Dex.forFormat(room.battle.format);
 		}
-		const species = Dex.deepClone(dex.getSpecies(mon));
+		const species = Utils.deepClone(dex.getSpecies(mon));
 		if (!species.exists || species.gen > dex.gen) {
 			const monName = species.gen > dex.gen ? species.name : mon.trim();
 			const additionalReason = species.gen > dex.gen ? ` in Generation ${dex.gen}` : ``;
@@ -491,7 +491,7 @@ export const commands: ChatCommands = {
 		} = dex.getNature(nature);
 		if (dex.gen < 3) return this.errorReply(`Error: Natures don't exist prior to Generation 3.`);
 		if (!natureObj.exists) return this.errorReply(`Error: Nature ${nature} not found.`);
-		const species = Dex.deepClone(dex.getSpecies(pokemon));
+		const species = Utils.deepClone(dex.getSpecies(pokemon));
 		if (!species.exists || species.gen > dex.gen) {
 			const monName = species.gen > dex.gen ? species.name : args[0].trim();
 			const additionalReason = species.gen > dex.gen ? ` in Generation ${dex.gen}` : ``;
@@ -544,9 +544,9 @@ export const commands: ChatCommands = {
 		if (setStage + 1 !== crossStage) {
 			return this.errorReply(`Error: Cross evolution must follow evolutionary stages. (${species.name} is Stage ${setStage} and can only cross evolve to Stage ${setStage + 1})`);
 		}
-		const mixedSpecies = Dex.deepClone(species);
-		mixedSpecies.abilities = Dex.deepClone(crossSpecies.abilities);
-		mixedSpecies.baseStats = Dex.deepClone(mixedSpecies.baseStats);
+		const mixedSpecies = Utils.deepClone(species);
+		mixedSpecies.abilities = Utils.deepClone(crossSpecies.abilities);
+		mixedSpecies.baseStats = Utils.deepClone(mixedSpecies.baseStats);
 		let statName: StatName;
 		for (statName in species.baseStats) {
 			const statChange = crossSpecies.baseStats[statName] - prevo.baseStats[statName];
@@ -611,7 +611,7 @@ export const commands: ChatCommands = {
 			this.errorReply(`Warning: ${evo.name} is a fake Pok\u00e9mon created by the CAP Project and is restricted to CAP.`);
 		}
 		const prevoSpecies = Dex.getSpecies(evo.prevo);
-		const deltas = Dex.deepClone(evo);
+		const deltas = Utils.deepClone(evo);
 		deltas.tier = 'CE';
 		deltas.weightkg = evo.weightkg - prevoSpecies.weightkg;
 		let i: StatName;

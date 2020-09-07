@@ -75,7 +75,7 @@ export const commands: ChatCommands = {
 	dsearch: 'dexsearch',
 	nds: 'dexsearch',
 	dexsearch(target, room, user, connection, cmd, message) {
-		if (!this.canBroadcast()) return;
+		this.checkBroadcast();
 		if (!target) return this.parse('/help dexsearch');
 		const targetGen = parseInt(cmd[cmd.length - 1]);
 		if (targetGen) target += `, maxgen${targetGen}`;
@@ -150,7 +150,7 @@ export const commands: ChatCommands = {
 	rollmove: 'randommove',
 	randmove: 'randommove',
 	randommove(target, room, user, connection, cmd, message) {
-		if (!this.canBroadcast(true)) return;
+		this.checkBroadcast(true);
 		const targets = target.split(",");
 		const targetsBuffer = [];
 		let qty;
@@ -195,7 +195,7 @@ export const commands: ChatCommands = {
 	rollpokemon: 'randompokemon',
 	randpoke: 'randompokemon',
 	randompokemon(target, room, user, connection, cmd, message) {
-		if (!this.canBroadcast(true)) return;
+		this.checkBroadcast(true);
 		const targets = target.split(",");
 		const targetsBuffer = [];
 		let qty;
@@ -250,7 +250,7 @@ export const commands: ChatCommands = {
 	msearch: 'movesearch',
 	nms: 'movesearch',
 	movesearch(target, room, user, connection, cmd, message) {
-		if (!this.canBroadcast()) return;
+		this.checkBroadcast();
 		if (!target) return this.parse('/help movesearch');
 		const targetGen = parseInt(cmd[cmd.length - 1]);
 		if (targetGen) target += `, maxgen${targetGen}`;
@@ -309,7 +309,7 @@ export const commands: ChatCommands = {
 	is7: 'itemsearch',
 	is8: 'itemsearch',
 	itemsearch(target, room, user, connection, cmd, message) {
-		if (!this.canBroadcast()) return;
+		this.checkBroadcast();
 		if (!target) return this.parse('/help itemsearch');
 		const targetGen = parseInt(cmd[cmd.length - 1]);
 		if (targetGen) target += ` maxgen${targetGen}`;
@@ -353,7 +353,7 @@ export const commands: ChatCommands = {
 	as7: 'abilitysearch',
 	as8: 'abilitysearch',
 	abilitysearch(target, room, user, connection, cmd, message) {
-		if (!this.canBroadcast()) return;
+		this.checkBroadcast();
 		if (!target) return this.parse('/help abilitysearch');
 		const targetGen = parseInt(cmd[cmd.length - 1]);
 		if (targetGen) target += ` maxgen${targetGen}`;
@@ -398,7 +398,7 @@ export const commands: ChatCommands = {
 	usumlearn: 'learn',
 	learn(target, room, user, connection, cmd, message) {
 		if (!target) return this.parse('/help learn');
-		if (!this.canBroadcast()) return;
+		this.checkBroadcast();
 
 		return runSearch({
 			tar: target,
@@ -1488,17 +1488,17 @@ function runMovesearch(target: string, cmd: string, canAll: boolean, message: st
 	const mod = Dex.mod('gen' + maxGen);
 
 	const getFullLearnsetOfPokemon = (species: Species) => {
-		let usedSpecies: Species = Dex.deepClone(species);
-		let usedSpeciesLearnset: LearnsetData = Dex.deepClone(Dex.getLearnsetData(usedSpecies.id));
+		let usedSpecies: Species = Utils.deepClone(species);
+		let usedSpeciesLearnset: LearnsetData = Utils.deepClone(Dex.getLearnsetData(usedSpecies.id));
 		if (!usedSpeciesLearnset.learnset) {
-			usedSpecies = Dex.deepClone(mod.getSpecies(usedSpecies.baseSpecies));
-			usedSpeciesLearnset.learnset = Dex.deepClone(mod.getLearnsetData(usedSpecies.id).learnset || {});
+			usedSpecies = Utils.deepClone(mod.getSpecies(usedSpecies.baseSpecies));
+			usedSpeciesLearnset.learnset = Utils.deepClone(mod.getLearnsetData(usedSpecies.id).learnset || {});
 		}
 		const lsetData = new Set(Object.keys(usedSpeciesLearnset.learnset!));
 
 		while (usedSpecies.prevo) {
-			usedSpecies = Dex.deepClone(mod.getSpecies(usedSpecies.prevo));
-			usedSpeciesLearnset = Dex.deepClone(mod.getLearnsetData(usedSpecies.id));
+			usedSpecies = Utils.deepClone(mod.getSpecies(usedSpecies.prevo));
+			usedSpeciesLearnset = Utils.deepClone(mod.getLearnsetData(usedSpecies.id));
 			for (const move in usedSpeciesLearnset.learnset) {
 				lsetData.add(move);
 			}
@@ -2210,7 +2210,7 @@ function runLearn(target: string, cmd: string, canAll: boolean, message: string)
 			if (format.minSourceGen && format.minSourceGen === 6) {
 				return {error: "'pentagon' can't be used with formats."};
 			}
-			format = Dex.deepClone(Dex.getFormat(targetid));
+			format = Utils.deepClone(Dex.getFormat(targetid));
 			formatid = targetid;
 			formatName = format.name;
 			targets.shift();

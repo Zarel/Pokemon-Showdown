@@ -69,7 +69,7 @@ describe('Prankster', function () {
 
 		battle.makeChoices('move encore 1, move calmmind', 'move frustration 2, move agility');
 		battle.makeChoices('move encore 1, move calmmind', 'move leer, move agility');
-		assert(battle.p2.active[0].volatiles.encore, `Meowstic should be encored`);
+		assert(battle.p2.active[0].volatiles['encore'], `Meowstic should be encored`);
 		assert.fullHP(battle.p1.active[0]);
 	});
 });

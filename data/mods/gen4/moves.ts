@@ -1570,7 +1570,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		desc: "Fails if the target did not select a physical or special attack for use this turn, or if the target moves before the user.",
 		onTry(source, target) {
 			const action = this.queue.willMove(target);
-			if (!action || action.choice !== 'move' || action.move.category === 'Status' || target.volatiles.mustrecharge) {
+			if (!action || action.choice !== 'move' || action.move.category === 'Status' || target.volatiles['mustrecharge']) {
 				this.add('-fail', source);
 				return null;
 			}

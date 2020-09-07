@@ -472,7 +472,7 @@ export class ScavengerHunt extends Rooms.RoomGame {
 				"You cannot join your own hunt! If you wish to view your questions, use /viewhunt instead!"
 			);
 		}
-		if (Object.keys(user.ips).some(ip => this.joinedIps.includes(ip))) {
+		if (user.ips.some(ip => this.joinedIps.includes(ip))) {
 			return user.sendTo(this.room, "You already have one alt in the hunt.");
 		}
 		if (this.runEvent('Join', user)) return false;
@@ -490,7 +490,7 @@ export class ScavengerHunt extends Rooms.RoomGame {
 	cacheUserIps(user: User | FakeUser) {
 		// limit to 1 IP in every game.
 		if (!('ips' in user)) return; // ghost user object cached from queue
-		for (const ip in user.ips) {
+		for (const ip of user.ips) {
 			this.joinedIps.push(ip);
 		}
 	}
@@ -709,8 +709,9 @@ export class ScavengerHunt extends Rooms.RoomGame {
 
 		const now = Date.now();
 		const time = Chat.toDurationString(now - this.startTime, {hhmmss: true});
+		const canBlitz = this.completed.length < 3;
 
-		const blitz = now - this.startTime <= 60000 &&
+		const blitz = now - this.startTime <= 60000 && canBlitz &&
 			(this.room.settings.scavSettings?.blitzPoints?.[this.gameType] || DEFAULT_BLITZ_POINTS[this.gameType]);
 
 		player.completed = true;
@@ -1006,7 +1007,7 @@ export class ScavengerHuntPlayer extends Rooms.RoomGamePlayer {
 		super(user, game);
 		this.game = game;
 
-		this.joinIps = Object.keys(user.ips);
+		this.joinIps = user.ips.slice();
 
 		this.currentQuestion = 0;
 		this.completed = false;
@@ -1052,27 +1053,25 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	guess(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply("There is no scavenger hunt currently running.");
-		if (!this.canTalk()) {
-			return this.errorReply("You cannot participate in the scavenger hunt when you are unable to talk.");
-		}
+		this.checkChat();
 
 		game.onSubmit(user, target);
 	},
 
 	join(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply("There is no scavenger hunt currently running.");
-		if (!this.canTalk()) return this.errorReply("You cannot join the scavenger hunt when you are unable to talk.");
+		this.checkChat();
 
 		game.joinGame(user);
 	},
 
 	leave(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply("There is no scavenger hunt currently running.");
 		game.leaveGame(user);
@@ -1091,8 +1090,8 @@ const ScavengerCommands: ChatCommands = {
 		create: 'start',
 		new: 'start',
 		start(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('mute', null, room)) return false;
+			room = this.requireRoom();
+			this.checkCan('mute', null, room);
 			if (room.scavgame) return this.errorReply('There is already a scavenger game running.');
 			if (room.getGame(ScavengerHunt)) {
 				return this.errorReply('You cannot start a scavenger game where there is already a scavenger hunt in the room.');
@@ -1112,8 +1111,8 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		end(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('mute', null, room)) return false;
+			room = this.requireRoom();
+			this.checkCan('mute', null, room);
 			if (!room.scavgame) return this.errorReply(`There is no scavenger game currently running.`);
 
 			this.privateModAction(`The ${room.scavgame.name} has been forcibly ended by ${user.name}.`);
@@ -1123,8 +1122,8 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		kick(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('mute', null, room)) return false;
+			room = this.requireRoom();
+			this.checkCan('mute', null, room);
 			if (!room.scavgame) return this.errorReply(`There is no scavenger game currently running.`);
 
 			const targetId = toID(target);
@@ -1147,7 +1146,7 @@ const ScavengerCommands: ChatCommands = {
 		score: 'leaderboard',
 		scoreboard: 'leaderboard',
 		async leaderboard(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (!room.scavgame) return this.errorReply(`There is no scavenger game currently running.`);
 			if (!room.scavgame.leaderboard) return this.errorReply("This scavenger game does not have a leaderboard.");
 			if (!this.runBroadcast()) return false;
@@ -1157,7 +1156,7 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		async rank(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			if (!room.scavgame) return this.errorReply(`There is no scavenger game currently running.`);
 			if (!room.scavgame.leaderboard) return this.errorReply("This scavenger game does not have a leaderboard.");
 			if (!this.runBroadcast()) return false;
@@ -1176,8 +1175,8 @@ const ScavengerCommands: ChatCommands = {
 	teamscavs: {
 		addteam: 'createteam',
 		createteam(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('mute', null, room)) return false;
+			room = this.requireRoom();
+			this.checkCan('mute', null, room);
 			// if (room.getGame(ScavengerHunt)) return this.errorReply('Teams cannot be modified after the hunt starts.');
 
 			const game = room.scavgame;
@@ -1197,8 +1196,8 @@ const ScavengerCommands: ChatCommands = {
 
 		deleteteam: 'removeteam',
 		removeteam(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('mute', null, room)) return false;
+			room = this.requireRoom();
+			this.checkCan('mute', null, room);
 			// if (room.getGame(ScavengerHunt)) return this.errorReply('Teams cannot be modified after the hunt starts.');
 
 			const game = room.scavgame;
@@ -1211,7 +1210,7 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		addplayer(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			const game = room.scavgame;
 			if (!game || game.id !== 'teamscavs') return this.errorReply('There is currently no game of Team Scavs going on.');
 			// if (room.getGame(ScavengerHunt)) return this.errorReply('Teams cannot be modified after the hunt starts.');
@@ -1246,10 +1245,10 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		editplayers(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			const game = room.scavgame;
 			if (!game || game.id !== 'teamscavs') return this.errorReply('There is currently no game of Team Scavs going on.');
-			if (!this.can('mute', null, room)) return false;
+			this.checkCan('mute', null, room);
 			// if (room.getGame(ScavengerHunt)) return this.errorReply('Teams cannot be modified after the hunt starts.');
 
 			const parts = target.split(',');
@@ -1296,7 +1295,7 @@ const ScavengerCommands: ChatCommands = {
 
 		teams(target, room, user) {
 			if (!this.runBroadcast()) return false;
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 
 			const game = room.scavgame;
 			if (!game || game.id !== 'teamscavs') return this.errorReply('There is currently no game of Team Scavs going on.');
@@ -1311,7 +1310,7 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		guesses(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			const game = room.scavgame;
 			if (!game || game.id !== 'teamscavs') return this.errorReply('There is currently no game of Team Scavs going on.');
 
@@ -1323,7 +1322,7 @@ const ScavengerCommands: ChatCommands = {
 
 		chat: 'note',
 		note(target, room, user) {
-			if (!room) return this.requiresRoom();
+			room = this.requireRoom();
 			const game = room.scavgame;
 			if (!game || game.id !== 'teamscavs') return this.errorReply('There is currently no game of Team Scavs going on.');
 
@@ -1361,11 +1360,11 @@ const ScavengerCommands: ChatCommands = {
 	forcecreateunrated: 'create',
 	createrecycled: 'create',
 	create(target, room, user, connection, cmd) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("Scavenger hunts can only be created in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 		if (room.game) return this.errorReply(`There is already a game in this room - ${room.game.title}.`);
 		let gameType = 'regular' as GameTypes;
 		if (cmd.includes('practice')) {
@@ -1424,7 +1423,9 @@ const ScavengerCommands: ChatCommands = {
 			room,
 			gameType === 'official' || gameType === 'recycled'
 		);
-		if (!hosts) return this.errorReply("The user(s) you specified as the host is not online, or is not in the room.");
+		if (!hosts.length) {
+			return this.errorReply("The user(s) you specified as the host is not online, or is not in the room.");
+		}
 
 		const res = ScavengerHunt.parseQuestions(params);
 		if (res.err) return this.errorReply(res.err);
@@ -1436,7 +1437,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	status(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1472,15 +1473,15 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	hint(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 		if (!game.onSendQuestion(user, true)) this.errorReply("You are not currently participating in the hunt.");
 	},
 
 	timer(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('mute', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('mute', null, room);
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1493,8 +1494,8 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	inherit(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('mute', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('mute', null, room);
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1512,8 +1513,8 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	reset(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('mute', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('mute', null, room);
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1523,8 +1524,8 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	resettoqueue(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('mute', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('mute', null, room);
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1548,8 +1549,8 @@ const ScavengerCommands: ChatCommands = {
 
 	forceend: 'end',
 	end(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('mute', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('mute', null, room);
 		if (!room.game && room.scavgame) return this.parse('/scav games end');
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
@@ -1570,7 +1571,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	viewhunt(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1580,7 +1581,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	edithunt(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 		if (
@@ -1598,7 +1599,7 @@ const ScavengerCommands: ChatCommands = {
 
 	addhint: 'spoiler',
 	spoiler(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 		if (
@@ -1620,7 +1621,7 @@ const ScavengerCommands: ChatCommands = {
 
 	deletehint: 'removehint',
 	removehint(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 		if (
@@ -1644,7 +1645,7 @@ const ScavengerCommands: ChatCommands = {
 
 	modifyhint: 'edithint',
 	edithint(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 		if (
@@ -1669,7 +1670,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	kick(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const game = room.getGame(ScavengerHunt);
 		if (!game) return this.errorReply(`There is no scavenger hunt currently running.`);
 
@@ -1691,7 +1692,7 @@ const ScavengerCommands: ChatCommands = {
 	queuerated: 'queue',
 	queuerecycled: 'queue',
 	queue(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
@@ -1704,7 +1705,7 @@ const ScavengerCommands: ChatCommands = {
 			return this.parse('/scavhelp staff');
 		}
 
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		if (this.cmd === 'queuerecycled') {
 			if (ScavengerHuntDatabase.isEmpty()) {
@@ -1733,7 +1734,9 @@ const ScavengerCommands: ChatCommands = {
 		} else {
 			const [hostsArray, ...params] = target.split('|');
 			const hosts = ScavengerHunt.parseHosts(hostsArray.split(/[,;]/), room);
-			if (!hosts) return this.errorReply("The user(s) you specified as the host is not online, or is not in the room.");
+			if (!hosts.length) {
+				return this.errorReply("The user(s) you specified as the host is not online, or is not in the room.");
+			}
 
 			const results = ScavengerHunt.parseQuestions(params);
 			if (results.err) return this.errorReply(results.err);
@@ -1754,11 +1757,11 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	dequeue(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 		const id = parseInt(target);
 
 		// this command should be using the display to manage anyways, so no error message is needed
@@ -1772,7 +1775,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	viewqueue(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
@@ -1782,11 +1785,11 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	next(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		if (!room.settings.scavQueue || !room.settings.scavQueue.length) {
 			return this.errorReply("The scavenger hunt queue is currently empty.");
@@ -1815,11 +1818,11 @@ const ScavengerCommands: ChatCommands = {
 
 	enablequeue: 'disablequeue',
 	disablequeue(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return;
+		this.checkCan('mute', null, room);
 
 
 		if (!room.settings.scavSettings) room.settings.scavSettings = {};
@@ -1837,11 +1840,11 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	defaulttimer(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('declare', null, room)) return;
+		this.checkCan('declare', null, room);
 
 		if (!room.settings.scavSettings) room.settings.scavSettings = {};
 		if (!target) {
@@ -1864,9 +1867,9 @@ const ScavengerCommands: ChatCommands = {
 	 * Leaderboard Commands
 	 */
 	addpoints(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'scavengers') return this.errorReply("This command can only be used in the scavengers room.");
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		const parts = target.split(',');
 		const targetId = toID(parts[0]);
@@ -1882,9 +1885,9 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	removepoints(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'scavengers') return this.errorReply("This command can only be used in the scavengers room.");
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		const parts = target.split(',');
 		const targetId = toID(parts[0]);
@@ -1900,9 +1903,9 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	resetladder(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'scavengers') return this.errorReply("This command can only be used in the scavengers room.");
-		if (!this.can('declare', null, room)) return false;
+		this.checkCan('declare', null, room);
 
 		Leaderboard.reset().write();
 
@@ -1911,7 +1914,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 	top: 'ladder',
 	async ladder(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
@@ -1923,7 +1926,7 @@ const ScavengerCommands: ChatCommands = {
 		const ladder = await Leaderboard.visualize('points') as AnyObject[];
 		this.sendReply(
 			`|uhtml${isChange ? 'change' : ''}|scavladder|<div class="ladder" style="overflow-y: scroll; max-height: 300px;"><table style="width: 100%"><tr><th>Rank</th><th>Name</th><th>Points</th></tr>${ladder.map(entry => {
-				const isStaff = room.auth.has(toID(entry.name));
+				const isStaff = room!.auth.has(toID(entry.name));
 				if (isStaff && hideStaff) return '';
 				return `<tr><td>${entry.rank}</td><td>${(isStaff ? `<em>${Utils.escapeHTML(entry.name)}</em>` : (entry.rank <= 5 ? `<strong>${Utils.escapeHTML(entry.name)}</strong>` : Utils.escapeHTML(entry.name)))}</td><td>${entry.points}</td></tr>`;
 			}).join('')}</table></div>` +
@@ -1936,7 +1939,7 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	async rank(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
@@ -1956,12 +1959,12 @@ const ScavengerCommands: ChatCommands = {
 	 * Leaderboard Point Distribution Editing
 	 */
 	setblitz(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const scavsRoom = getScavsRoom(room);
 		if (!scavsRoom) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false; // perms for viewing only
+		this.checkCan('mute', null, room); // perms for viewing only
 
 		if (!room.settings.scavSettings) room.settings.scavSettings = {};
 		if (!target) {
@@ -1973,7 +1976,7 @@ const ScavengerCommands: ChatCommands = {
 			return this.sendReplyBox(`The points rewarded for winning hunts within a minute is:<br />${points.join('<br />')}`);
 		}
 
-		if (!this.can('declare', null, room)) return false; // perms for editing
+		this.checkCan('declare', null, room); // perms for editing
 
 		const parts = target.split(',');
 		const blitzPoints = parseInt(parts[1]);
@@ -1999,12 +2002,12 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	sethostpoints(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const scavsRoom = getScavsRoom(room);
 		if (!scavsRoom) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false; // perms for viewing only
+		this.checkCan('mute', null, room); // perms for viewing only
 		if (!room.settings.scavSettings) room.settings.scavSettings = {};
 		if (!target) {
 			const pointSetting = Object.hasOwnProperty.call(room.settings.scavSettings, 'hostPoints') ?
@@ -2012,7 +2015,7 @@ const ScavengerCommands: ChatCommands = {
 			return this.sendReply(`The points rewarded for hosting a regular hunt is ${pointSetting}.`);
 		}
 
-		if (!this.can('declare', null, room)) return false; // perms for editting
+		this.checkCan('declare', null, room); // perms for editting
 		const points = parseInt(target);
 		if (isNaN(points)) return this.errorReply(`${target} is not a valid number of points.`);
 
@@ -2029,12 +2032,12 @@ const ScavengerCommands: ChatCommands = {
 		}
 	},
 	setpoints(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const scavsRoom = getScavsRoom(room);
 		if (!scavsRoom) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false; // perms for viewing only
+		this.checkCan('mute', null, room); // perms for viewing only
 		if (!room.settings.scavSettings) room.settings.scavSettings = {};
 		if (!target) {
 			const points = [];
@@ -2048,7 +2051,7 @@ const ScavengerCommands: ChatCommands = {
 			return this.sendReplyBox(`The points rewarded for winning hunts is:<br />${points.join('<br />')}`);
 		}
 
-		if (!this.can('declare', null, room)) return false; // perms for editting
+		this.checkCan('declare', null, room); // perms for editting
 
 		let [type, ...pointsSet] = target.split(',');
 		type = toID(type) as GameTypes;
@@ -2077,7 +2080,7 @@ const ScavengerCommands: ChatCommands = {
 
 	resettwist: 'settwist',
 	settwist(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		const scavsRoom = getScavsRoom(room);
 		if (!scavsRoom) {
 			return this.errorReply("This command can only be used in the scavengers room.");
@@ -2089,7 +2092,7 @@ const ScavengerCommands: ChatCommands = {
 			const twist = room.settings.scavSettings.officialtwist || 'none';
 			return this.sendReplyBox(`The current official twist is: ${twist}`);
 		}
-		if (!this.can('declare', null, room)) return false;
+		this.checkCan('declare', null, room);
 		if (target === 'RESET') {
 			room.settings.scavSettings.officialtwist = null;
 		} else {
@@ -2121,11 +2124,11 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	twists(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (!getScavsRoom(room)) {
 			return this.errorReply("This command can only be used in the scavengers room.");
 		}
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 		if (!this.runBroadcast()) return false;
 
 		let buffer = `<table><tr><th>Twist</th><th>Description</th></tr>`;
@@ -2143,12 +2146,12 @@ const ScavengerCommands: ChatCommands = {
 	 */
 	huntcount: 'huntlogs',
 	async huntlogs(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'scavengers') return this.errorReply("This command can only be used in the scavengers room.");
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		if (target === 'RESET') {
-			if (!this.can('declare', null, room)) return false;
+			this.checkCan('declare', null, room);
 			HostLeaderboard.softReset().then(() => {
 				HostLeaderboard.write();
 				this.privateModAction(`${user.name} has reset the host log leaderboard into the next month.`);
@@ -2156,7 +2159,7 @@ const ScavengerCommands: ChatCommands = {
 			});
 			return;
 		} else if (target === 'HARD RESET') {
-			if (!this.can('declare', null, room)) return false;
+			this.checkCan('declare', null, room);
 			HostLeaderboard.hardReset().write();
 			this.privateModAction(`${user.name} has hard reset the host log leaderboard.`);
 			this.modlog('SCAV HUNTLOGS', null, 'HARD RESET');
@@ -2172,7 +2175,7 @@ const ScavengerCommands: ChatCommands = {
 		const data = await HostLeaderboard.visualize(sortMethod) as AnyObject[];
 		this.sendReply(`|${isUhtmlChange ? 'uhtmlchange' : 'uhtml'}|scav-huntlogs|<div class="ladder" style="overflow-y: scroll; max-height: 300px;"><table style="width: 100%"><tr><th>Rank</th><th>Name</th><th>Hunts Created</th><th>Total Hunts Created</th><th>History</th></tr>${
 			data.map((entry: AnyObject) => {
-				const auth = room.auth.get(toID(entry.name)).trim();
+				const auth = room!.auth.get(toID(entry.name)).trim();
 				const color = auth ? 'inherit' : 'gray';
 				return `<tr><td>${entry.rank}</td><td><span style="color: ${color}">${auth || '&nbsp;'}</span>${Utils.escapeHTML(entry.name)}</td>` +
 					`<td style="text-align: right;">${(entry.points || 0)}</td>` +
@@ -2185,12 +2188,12 @@ const ScavengerCommands: ChatCommands = {
 	},
 
 	async playlogs(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'scavengers') return this.errorReply("This command can only be used in the scavengers room.");
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		if (target === 'RESET') {
-			if (!this.can('declare', null, room)) return false;
+			this.checkCan('declare', null, room);
 			PlayerLeaderboard.softReset().then(() => {
 				PlayerLeaderboard.write();
 				this.privateModAction(`${user.name} has reset the player log leaderboard into the next month.`);
@@ -2198,7 +2201,7 @@ const ScavengerCommands: ChatCommands = {
 			});
 			return;
 		} else if (target === 'HARD RESET') {
-			if (!this.can('declare', null, room)) return false;
+			this.checkCan('declare', null, room);
 			PlayerLeaderboard.hardReset().write();
 			this.privateModAction(`${user.name} has hard reset the player log leaderboard.`);
 			this.modlog('SCAV PLAYLOGS', null, 'HARD RESET');
@@ -2221,7 +2224,7 @@ const ScavengerCommands: ChatCommands = {
 
 		this.sendReply(`|${isUhtmlChange ? 'uhtmlchange' : 'uhtml'}|scav-playlogs|<div class="ladder" style="overflow-y: scroll; max-height: 300px;"><table style="width: 100%"><tr><th>Rank</th><th>Name</th><th>Finished Hunts</th><th>Joined Hunts</th><th>Ratio</th><th>Infractions</th></tr>${
 			formattedData.map(entry => {
-				const auth = room.auth.get(toID(entry.name)).trim();
+				const auth = room!.auth.get(toID(entry.name)).trim();
 				const color = auth ? 'inherit' : 'gray';
 
 				return `<tr><td>${entry.rank}</td><td><span style="color: ${color}">${auth || '&nbsp;'}</span>${Utils.escapeHTML(entry.name)}</td>` +
@@ -2237,9 +2240,9 @@ const ScavengerCommands: ChatCommands = {
 
 	uninfract: "infract",
 	infract(target, room, user) {
-		if (!room) return this.requiresRoom();
+		room = this.requireRoom();
 		if (room.roomid !== 'scavengers') return this.errorReply("This command can only be used in the scavengers room.");
-		if (!this.can('mute', null, room)) return false;
+		this.checkCan('mute', null, room);
 
 		const targetId = toID(target);
 		if (!targetId) return this.errorReply(`Please include the name of the user to ${this.cmd}.`);
@@ -2254,8 +2257,9 @@ const ScavengerCommands: ChatCommands = {
 	modsettings: {
 		'': 'update',
 		'update'(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('declare', null, room) || !getScavsRoom(room)) return false;
+			room = this.requireRoom();
+			if (!getScavsRoom(room)) return false;
+			this.checkCan('declare', null, room);
 			const settings = room.settings.scavSettings?.scavmod || {};
 
 			this.sendReply(`|uhtml${this.cmd === 'update' ? 'change' : ''}|scav-modsettings|<div class=infobox><strong>Scavenger Moderation Settings:</strong><br /><br />` +
@@ -2264,8 +2268,9 @@ const ScavengerCommands: ChatCommands = {
 		},
 
 		'ipcheck'(target, room, user) {
-			if (!room) return this.requiresRoom();
-			if (!this.can('declare', null, room) || !getScavsRoom(room)) return false;
+			room = this.requireRoom();
+			if (!getScavsRoom(room)) return false;
+			this.checkCan('declare', null, room);
 
 			if (!room.settings.scavSettings) room.settings.scavSettings = {};
 			const settings = room.settings.scavSettings.scavmod || {};
@@ -2295,8 +2300,8 @@ const ScavengerCommands: ChatCommands = {
 	 * Database Commands
 	 */
 	recycledhunts(target, room, user) {
-		if (!room) return this.requiresRoom();
-		if (!this.can('mute', null, room)) return false;
+		room = this.requireRoom();
+		this.checkCan('mute', null, room);
 		if (!getScavsRoom(room)) {
 			return this.errorReply("Scavenger Hunts can only be added to the database in the scavengers room.");
 		}
@@ -2314,7 +2319,9 @@ const ScavengerCommands: ChatCommands = {
 
 			const [hostsArray, ...questions] = target.split('|');
 			const hosts = ScavengerHunt.parseHosts(hostsArray.split(/[,;]/), room, true);
-			if (!hosts) return this.errorReply("You need to specify a host.");
+			if (!hosts.length) {
+				return this.errorReply("You need to specify a host.");
+			}
 
 			const result = ScavengerHunt.parseQuestions(questions);
 			if (result.err) return this.errorReply(result.err);
@@ -2421,7 +2428,7 @@ export const pages: PageTable = {
 		let buf = "";
 		if (!user.named) return Rooms.RETRY_AFTER_LOGIN;
 		if (!room.persist) return;
-		if (!this.can('mute', null, room)) return;
+		this.checkCan('mute', null, room);
 		buf += `<div class="pad"><h2>List of recycled Scavenger hunts</h2>`;
 		buf += `<ol style="width: 90%;">`;
 		for (const hunt of scavengersData.recycledHunts) {

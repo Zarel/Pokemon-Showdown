@@ -96,7 +96,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 			}
 		},
 		name: "Lightning Rod",
-		rating: 3.5,
+		rating: 0,
 		num: 32,
 	},
 	minus: {

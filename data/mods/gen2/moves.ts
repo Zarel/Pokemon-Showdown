@@ -129,6 +129,11 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		inherit: true,
 		shortDesc: "10% chance to freeze the target.",
 	},
+	block: {
+		inherit: true,
+		accuracy: true,
+		ignoreAccuracy: false,
+	},
 	bubble: {
 		inherit: true,
 		shortDesc: "10% chance to lower the target's Speed by 1.",
@@ -346,7 +351,24 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	foresight: {
 		inherit: true,
+		accuracy: 100,
 		desc: "As long as the target remains active, if its evasiveness stat stage is greater than the attacker's accuracy stat stage, both are ignored during accuracy checks, and Normal- and Fighting-type attacks can hit the target if it is a Ghost type. If the target leaves the field using Baton Pass, the replacement will remain under this effect. Fails if the target is already affected.",
+		onTryHit(target) {
+			if (target.volatiles['foresight']) return false;
+		},
+		condition: {
+			onStart(pokemon) {
+				this.add('-start', pokemon, 'Foresight');
+			},
+			onNegateImmunity(pokemon, type) {
+				if (pokemon.hasType('Ghost') && ['Normal', 'Fighting'].includes(type)) return false;
+			},
+			onModifyBoost(boosts) {
+				if (boosts.evasion && boosts.evasion > 0) {
+					boosts.evasion = 0;
+				}
+			},
+		},
 	},
 	futuresight: {
 		inherit: true,
@@ -455,8 +477,12 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	lockon: {
 		inherit: true,
+		accuracy: true,
 		desc: "The next accuracy check against the target succeeds. The target will still avoid Earthquake, Fissure, and Magnitude if it is using Fly. If the target leaves the field using Baton Pass, the replacement remains under this effect. This effect ends when the target leaves the field or an accuracy check is done against it.",
 		shortDesc: "The next move will not miss the target.",
+		onTryHit(target) {
+			if (target.volatiles['foresight'] || target.volatiles['lockon']) return false;
+		},
 		condition: {
 			duration: 2,
 			onSourceAccuracy(accuracy, target, source, move) {
@@ -478,6 +504,11 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			volatileStatus: 'flinch',
 		},
 	},
+	meanlook: {
+		inherit: true,
+		accuracy: true,
+		ignoreAccuracy: false,
+	},
 	metronome: {
 		inherit: true,
 		desc: "A random move is selected for use, other than Counter, Destiny Bond, Detect, Endure, Metronome, Mimic, Mirror Coat, Protect, Sketch, Sleep Talk, Struggle, or Thief.",
@@ -488,13 +519,19 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	},
 	mimic: {
 		inherit: true,
+		accuracy: true,
+		ignoreAccuracy: false,
 		desc: "While the user remains active, this move is replaced by the last move used by the target. The copied move has 5 PP. Fails if the target has not made a move, if the user already knows the move, or if the move is Struggle.",
 		noSketch: true,
 	},
 	mindreader: {
 		inherit: true,
+		accuracy: 100,
 		desc: "The next accuracy check against the target succeeds. The target will still avoid Earthquake, Fissure, and Magnitude if it is using Fly. If the target leaves the field using Baton Pass, the replacement remains under this effect. This effect ends when the target leaves the field or an accuracy check is done against it.",
 		shortDesc: "The next move will not miss the target.",
+		onTryHit(target) {
+			if (target.volatiles['foresight'] || target.volatiles['lockon']) return false;
+		},
 	},
 	minimize: {
 		inherit: true,
@@ -593,6 +630,11 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 				pokemon.removeVolatile('lockedmove');
 			}
 		},
+	},
+	painsplit: {
+		inherit: true,
+		accuracy: true,
+		ignoreAccuracy: false,
 	},
 	petaldance: {
 		inherit: true,
@@ -796,6 +838,11 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		},
 		// Rain weakening done directly in the damage formula
 		onBasePower() {},
+	},
+	spiderweb: {
+		inherit: true,
+		accuracy: true,
+		ignoreAccuracy: false,
 	},
 	spikes: {
 		inherit: true,
@@ -1035,6 +1082,11 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 		inherit: true,
 		desc: "Has a 20% chance to flinch the target. Power doubles if the target is using Fly.",
 		shortDesc: "20% chance to flinch the target.",
+	},
+	vitalthrow: {
+		inherit: true,
+		accuracy: true,
+		ignoreAccuracy: false,
 	},
 	whirlwind: {
 		inherit: true,

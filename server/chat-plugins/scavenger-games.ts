@@ -146,8 +146,9 @@ const TWISTS: {[k: string]: Twist} = {
 		onPreComplete(player) {
 			const now = Date.now();
 			const time = Chat.toDurationString(now - this.startTime, {hhmmss: true});
+			const canBlitz = this.completed.length < 3;
 
-			const blitz = now - this.startTime <= 60000 &&
+			const blitz = now - this.startTime <= 60000 && canBlitz &&
 				(this.room.settings.scavSettings?.blitzPoints?.[this.gameType] || this.gameType === 'official');
 
 			const result = this.runEvent('Complete', player, time, blitz) || {name: player.name, time, blitz};
@@ -193,8 +194,9 @@ const TWISTS: {[k: string]: Twist} = {
 		onPreComplete(player) {
 			const now = Date.now();
 			const time = Chat.toDurationString(now - this.startTime, {hhmmss: true});
+			const canBlitz = this.completed.length < 3;
 
-			const blitz = now - this.startTime <= 60000 &&
+			const blitz = now - this.startTime <= 60000 && canBlitz &&
 				(this.room.settings.scavSettings?.blitzPoints?.[this.gameType] || this.gameType === 'official');
 
 			const result = this.runEvent('Complete', player, time, blitz) || {name: player.name, time, blitz};
@@ -701,7 +703,7 @@ const LoadGame = function (room: Room, gameid: string) {
 
 	const base = new ScavengerGameTemplate(room);
 
-	const scavgame = Object.assign(base, Dex.deepClone(game));
+	const scavgame = Object.assign(base, Utils.deepClone(game));
 
 	// initialize leaderboard if required
 	if (scavgame.leaderboard) {
