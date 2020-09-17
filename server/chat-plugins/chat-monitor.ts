@@ -571,9 +571,9 @@ export const commands: ChatCommands = {
 			}
 			filterWords[list].push([regex, word, reason, filterTo || null, 0]);
 			if (Chat.monitors[list].punishment === 'FILTERTO') {
-				this.globalModlog(`ADDFILTER`, null, `'${String(regex)} => ${filterTo}' to ${list} list by ${user.name}${reason ? ` (${reason})` : ''}`);
+				this.globalModlog(`ADDFILTER`, null, `'${String(regex)} => ${filterTo}' to ${list} list ${reason ? `(${reason})` : ''}`);
 			} else {
-				this.globalModlog(`ADDFILTER`, null, `'${word}' to ${list} list by ${user.name}${reason ? ` (${reason})` : ''}`);
+				this.globalModlog(`ADDFILTER`, null, `'${word}' to ${list} list ${reason ? `(${reason})` : ''}`);
 			}
 			saveFilters(true);
 			const output = `'${word}' was added to the ${list} list.`;
@@ -598,7 +598,7 @@ export const commands: ChatCommands = {
 			}
 			filterWords[list] = filterWords[list].filter(entry => !words.includes(entry[1]));
 
-			this.globalModlog(`REMOVEFILTER`, null, `'${words.join(', ')}' from ${list} list by ${user.name}`);
+			this.globalModlog(`REMOVEFILTER`, null, `'${words.join(', ')}' from ${list} list`);
 			saveFilters(true);
 			const output = `'${words.join(', ')}' ${Chat.plural(words, "were", "was")} removed from the ${list} list.`;
 			Rooms.get('upperstaff')?.add(output).update();
@@ -629,7 +629,7 @@ export const commands: ChatCommands = {
 		const upperStaffRoom = Rooms.get('upperstaff');
 		if (staffRoom) staffRoom.add(msg).update();
 		if (upperStaffRoom) upperStaffRoom.add(msg).update();
-		this.globalModlog(`ALLOWNAME`, null, `${target} by ${user.name}`);
+		this.globalModlog(`ALLOWNAME`, null, target);
 	},
 };
 

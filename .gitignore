@@ -17,6 +17,7 @@ databases/*.db*
 # Typescript build artifacts
 .*-dist/
 tools/set-import/importer.js
+tools/modlog/converter.js
 
 # visual studio live share
 .vs

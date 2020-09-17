@@ -879,10 +879,13 @@ export class ScavengerHunt extends Rooms.RoomGame {
 
 			// notify staff
 			const staffMsg = `(${player.name} has been caught trying to do their own hunt.)`;
-			const logMsg = `([${player.id}] has been caught trying to do their own hunt.)`;
 			this.room.sendMods(staffMsg);
 			this.room.roomlog(staffMsg);
-			this.room.modlog(logMsg);
+			this.room.modlog({
+				action: 'SCAV CHEATER',
+				userid: player.id,
+				note: 'caught trying to do their own hunt',
+			});
 
 			PlayerLeaderboard.addPoints(player.name, 'infraction', 1);
 			player.infracted = true;
@@ -895,11 +898,14 @@ export class ScavengerHunt extends Rooms.RoomGame {
 
 			// notify staff
 			const staffMsg = `(${player.name} has been caught attempting a hunt with ${uniqueConnections} connections on the account. The user has also been given 1 infraction point on the player leaderboard.)`;
-			const logMsg = `([${player.id}] has been caught attempting a hunt with ${uniqueConnections} connections on the account. The user has also been given 1 infraction point on the player leaderboard.)`;
 
 			this.room.sendMods(staffMsg);
 			this.room.roomlog(staffMsg);
-			this.room.modlog(logMsg);
+			this.room.modlog({
+				action: 'SCAV CHEATER',
+				userid: player.id,
+				note: `caught attempting a hunt with ${uniqueConnections} connections on the account; has also been given 1 infraction point on the player leaderboard`,
+			});
 
 			PlayerLeaderboard.addPoints(player.name, 'infraction', 1);
 			player.infracted = true;
@@ -1995,7 +2001,11 @@ const ScavengerCommands: ChatCommands = {
 
 		// double modnote in scavs room if it is a subroomgroupchat
 		if (room.parent && !room.persist && scavsRoom) {
-			scavsRoom.modlog(`SCAV BLITZ: by ${user.id}: ${gameType}: ${blitzPoints}`);
+			scavsRoom.modlog({
+				action: 'SCAV BLITZ',
+				loggedBy: user.id,
+				note: `${gameType}: ${blitzPoints}`,
+			});
 			scavsRoom.sendMods(`(${user.name} has set the points awarded for blitz for ${gameType} hunts to ${blitzPoints} in <<${room.roomid}>>.)`);
 			scavsRoom.roomlog(`(${user.name} has set the points awarded for blitz for ${gameType} hunts to ${blitzPoints} in <<${room.roomid}>>.)`);
 		}
@@ -2026,7 +2036,11 @@ const ScavengerCommands: ChatCommands = {
 
 		// double modnote in scavs room if it is a subroomgroupchat
 		if (room.parent && !room.persist) {
-			scavsRoom.modlog(`SCAV SETHOSTPOINTS: [room: ${room.roomid}] by ${user.id}: ${points}`);
+			scavsRoom.modlog({
+				action: 'SCAV SETHOSTPOINTS',
+				loggedBy: user.id,
+				note: `${points} [room: ${room.roomid}]`,
+			});
 			scavsRoom.sendMods(`(${user.name} has set the points awarded for hosting regular scavenger hunts to - ${points} in <<${room.roomid}>>)`);
 			scavsRoom.roomlog(`(${user.name} has set the points awarded for hosting regular scavenger hunts to - ${points} in <<${room.roomid}>>)`);
 		}
@@ -2072,7 +2086,11 @@ const ScavengerCommands: ChatCommands = {
 
 		// double modnote in scavs room if it is a subroomgroupchat
 		if (room.parent && !room.persist) {
-			scavsRoom.modlog(`SCAV SETPOINTS: [room: ${room.roomid}] by ${user.id}: ${type}: ${pointsDisplay}`);
+			scavsRoom.modlog({
+				action: 'SCAV SETPOINTS',
+				loggedBy: user.id,
+				note: `${pointsDisplay} [room: ${room.roomid}]`,
+			});
 			scavsRoom.sendMods(`(${user.name} has set the points awarded for winning ${type} scavenger hunts to - ${pointsDisplay} in <<${room.roomid}>>)`);
 			scavsRoom.roomlog(`(${user.name} has set the points awarded for winning ${type} scavenger hunts to - ${pointsDisplay} in <<${room.roomid}>>)`);
 		}
@@ -2113,7 +2131,11 @@ const ScavengerCommands: ChatCommands = {
 		// double modnote in scavs room if it is a subroomgroupchat
 		if (room.parent && !room.persist) {
 			if (room.settings.scavSettings.officialtwist) {
-				scavsRoom.modlog(`SCAV TWIST: [room: ${room.roomid}] by ${user.id}: ${room.settings.scavSettings.officialtwist}`);
+				scavsRoom.modlog({
+					action: 'SCAV TWIST',
+					loggedBy: user.id,
+					note: `${room.settings.scavSettings.officialtwist} [room: ${room.roomid}]`,
+				});
 				scavsRoom.sendMods(`(${user.name} has set the official twist to - ${room.settings.scavSettings.officialtwist} in <<${room.roomid}>>)`);
 				scavsRoom.roomlog(`(${user.name} has set the official twist to  - ${room.settings.scavSettings.officialtwist} in <<${room.roomid}>>)`);
 			} else {

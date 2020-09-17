@@ -337,9 +337,11 @@ export abstract class BasicRoom {
 		this.log.roomlog(message);
 		return this;
 	}
-	modlog(message: string) {
-		const override = this.tour ? `${this.roomid} tournament: ${this.tour.roomid}` : undefined;
-		this.log.modlog(message, override);
+	modlog(entry: ModlogEntry) {
+		this.log.modlog({
+			...entry,
+			visualRoomID: (this.tour ? `${this.roomid} tournament: ${this.tour.roomid}` : undefined),
+		});
 		return this;
 	}
 	uhtmlchange(name: string, message: string) {
@@ -903,7 +905,7 @@ export abstract class BasicRoom {
 		}
 		this.logUserStatsInterval = null;
 
-		void this.log.destroy(true);
+		void this.log.destroy();
 
 		// get rid of some possibly-circular references
 		Rooms.rooms.delete(this.roomid);
@@ -996,8 +998,6 @@ export class GlobalRoomState {
 			// of GlobalRoom can have.
 			this.ladderIpLog = new WriteStream({write() { return undefined; }});
 		}
-		// Create writestream for modlog
-		Rooms.Modlog.initialize('global');
 
 		this.reportUserStatsInterval = setInterval(
 			() => this.reportUserStats(),
@@ -1022,8 +1022,8 @@ export class GlobalRoomState {
 		this.lastWrittenBattle = this.lastBattle;
 	}
 
-	modlog(message: string, overrideID?: string) {
-		void Rooms.Modlog.write('global', message, overrideID);
+	modlog(entry: ModlogEntry, overrideID?: string) {
+		void Rooms.Modlog.write('global', {...entry, visualRoomID: overrideID});
 	}
 
 	writeChatRoomData() {

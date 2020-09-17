@@ -8,26 +8,19 @@
  * @license MIT
  */
 
-import * as child_process from 'child_process';
-import {normalize as normalizePath} from 'path';
-import * as util from 'util';
 
 import {FS} from '../lib/fs';
-import {QueryProcessManager} from '../lib/process-manager';
-import {Repl} from '../lib/repl';
+import * as Database from 'better-sqlite3';
 
-const MAX_PROCESSES = 1;
 // If a modlog query takes longer than this, it will be logged.
 const LONG_QUERY_DURATION = 2000;
-const MODLOG_PATH = 'logs/modlog';
-
+const MODLOG_DB_PATH = `${__dirname}/../databases/modlog.db`;
+const MODLOG_SCHEMA_PATH = 'databases/schemas/modlog.sql';
 
 const GLOBAL_PUNISHMENTS = [
 	'WEEKLOCK', 'LOCK', 'BAN', 'RANGEBAN', 'RANGELOCK', 'FORCERENAME',
 	'TICKETBAN', 'AUTOLOCK', 'AUTONAMELOCK', 'NAMELOCK', 'AUTOBAN', 'MONTHLOCK',
 ];
-const GLOBAL_PUNISHMENTS_REGEX_STRING = `\\b(${GLOBAL_PUNISHMENTS.join('|')}):.*`;
-
 const PUNISHMENTS = [
 	...GLOBAL_PUNISHMENTS, 'ROOMBAN', 'UNROOMBAN', 'WARN', 'MUTE', 'HOURMUTE', 'UNMUTE',
 	'CRISISDEMOTE', 'UNLOCK', 'UNLOCKNAME', 'UNLOCKRANGE', 'UNLOCKIP', 'UNBAN',
@@ -36,306 +29,256 @@ const PUNISHMENTS = [
 	'NOTE', 'MAFIAHOSTBAN', 'MAFIAUNHOSTBAN', 'GIVEAWAYBAN', 'GIVEAWAYUNBAN',
 	'TOUR BAN', 'TOUR UNBAN', 'UNNAMELOCK',
 ];
-const PUNISHMENTS_REGEX_STRING = `\\b(${PUNISHMENTS.join('|')}):.*`;
-
-const execFile = util.promisify(child_process.execFile);
 
 export type ModlogID = RoomID | 'global';
 
 interface ModlogResults {
-	results: string[];
+	results: ModlogEntry[];
 	duration?: number;
 }
 
-interface ModlogQuery {
-	rooms: ModlogID[];
-	search: string;
-	isExact: boolean;
-	maxLines: number;
-	onlyPunishments: boolean | string;
+interface ModlogQuery<T> {
+	statement: Database.Statement<T>;
+	args: T[];
+	returnsResults?: boolean;
 }
 
-class SortedLimitedLengthList {
-	maxSize: number;
-	list: string[];
-
-	constructor(maxSize: number) {
-		this.maxSize = maxSize;
-		this.list = [];
-	}
-
-	getListClone() {
-		return this.list.slice();
-	}
-
-	insert(element: string) {
-		let insertedAt = -1;
-		for (let i = this.list.length - 1; i >= 0; i--) {
-			if (element.localeCompare(this.list[i]) < 0) {
-				insertedAt = i + 1;
-				if (i === this.list.length - 1) {
-					this.list.push(element);
-					break;
-				}
-				this.list.splice(i + 1, 0, element);
-				break;
-			}
-		}
-		if (insertedAt < 0) this.list.splice(0, 0, element);
-		if (this.list.length > this.maxSize) {
-			this.list.pop();
-		}
-	}
+export interface ModlogSearch {
+	note?: {searches: string[], isExact?: boolean};
+	user?: string;
+	ip?: string;
+	action?: string;
+	actionTaker?: string;
 }
 
-export function checkRipgrepAvailability() {
-	if (Config.ripgrepmodlog === undefined) {
-		Config.ripgrepmodlog = (async () => {
-			try {
-				await execFile('rg', ['--version'], {cwd: normalizePath(`${__dirname}/../`)});
-				await execFile('tac', ['--version'], {cwd: normalizePath(`${__dirname}/../`)});
-				return true;
-			} catch (error) {
-				return false;
-			}
-		})();
-	}
-	return Config.ripgrepmodlog;
+export interface ModlogEntry {
+	action: string;
+	roomID?: string;
+	visualRoomID?: string;
+	userid?: ID;
+	autoconfirmedID?: ID;
+	alts?: ID[];
+	ip?: string;
+	isGlobal?: boolean;
+	loggedBy?: ID;
+	note?: string;
+	/** Milliseconds since the epoch */
+	time?: number;
 }
+
 
 export class Modlog {
-	readonly logPath: string;
-	/**
-	 * If a stream is undefined, that means it has not yet been initialized.
-	 * If a stream is truthy, it is open and ready to be written to.
-	 * If a stream is null, it has been destroyed/disabled.
-	 */
-	sharedStreams: Map<ID, Streams.WriteStream | null> = new Map();
-	streams: Map<ModlogID, Streams.WriteStream | null> = new Map();
+	readonly database: Database.Database;
+	readonly usePM: boolean;
+	readonly modlogInsertionQuery: Database.Statement<ModlogEntry>;
+	readonly altsInsertionQuery: Database.Statement<[number, string]>;
+	readonly renameQuery: Database.Statement<[string, string]>;
+	readonly globalPunishmentsSearchQuery: Database.Statement<[string, string, string, number, ...string[]]>;
+	readonly insertionTransaction: Database.Transaction;
 
-	constructor(path: string) {
-		this.logPath = path;
+	constructor(path: string, noProcessManager = false) {
+		this.database = new Database(path);
+		this.database.exec("PRAGMA foreign_keys = ON;");
+		this.database.exec(FS(MODLOG_SCHEMA_PATH).readIfExistsSync()); // Set up tables, etc.
+		this.database.function('regex', {deterministic: true}, (regexString, toMatch) => {
+			return Number(RegExp(regexString).test(toMatch));
+		});
+
+		this.modlogInsertionQuery = this.database.prepare(
+			`INSERT INTO modlog (timestamp, roomid, visual_roomid, action, userid, autoconfirmed_userid, ip, action_taker_userid, note)` +
+			` VALUES ($time, $roomID, $visualRoomID, $action, $userid, $autoconfirmedID, $ip, $loggedBy, $note)`
+		);
+		this.altsInsertionQuery = this.database.prepare(`INSERT INTO alts (modlog_id, userid) VALUES (?, ?)`);
+		this.renameQuery = this.database.prepare(`UPDATE modlog SET roomid = ? WHERE roomid = ?`);
+		this.globalPunishmentsSearchQuery = this.database.prepare(
+			`SELECT * FROM modlog WHERE (roomid = 'global' OR roomid LIKE 'global-%') ` +
+			`AND (userid = ? OR autoconfirmed_userid = ? OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND userid = ?)) ` +
+			`AND timestamp > ?` +
+			`AND action IN (${this.formatArray(GLOBAL_PUNISHMENTS, [])}) `
+		);
+
+		this.insertionTransaction = this.database.transaction((entry: {
+			action: string,
+			roomID: string,
+			visualRoomID: string,
+			userid: ID,
+			autoconfirmedID: ID,
+			ip: string,
+			loggedBy: ID,
+			note: string,
+			time: number,
+			alts: ID[],
+		}) => {
+			const result = this.modlogInsertionQuery.run(entry);
+			for (const alt of entry.alts || []) {
+				this.altsInsertionQuery.run(result.lastInsertRowid as number, alt);
+			}
+		});
+		this.usePM = !noProcessManager && !Config.nofswriting;
 	}
 
-	/**************************************
-	 * Methods for writing to the modlog. *
-	 **************************************/
-	initialize(roomid: ModlogID) {
-		if (this.streams.get(roomid)) return;
-		const sharedStreamId = this.getSharedID(roomid);
-		if (!sharedStreamId) {
-			return this.streams.set(roomid, FS(`${this.logPath}/modlog_${roomid}.txt`).createAppendStream());
-		}
-
-		let stream = this.sharedStreams.get(sharedStreamId);
-		if (!stream) {
-			stream = FS(`${this.logPath}/modlog_${sharedStreamId}.txt`).createAppendStream();
-			this.sharedStreams.set(sharedStreamId, stream);
-		}
-		this.streams.set(roomid, stream);
+	runSQL(query: ModlogQuery<any>): Database.RunResult {
+		return query.statement.run(query.args);
 	}
 
-	getSharedID(roomid: ModlogID): ID | false {
-		return roomid.includes('-') ? `${toID(roomid.split('-')[0])}-rooms` as ID : false;
+	runSQLWithResults(query: ModlogQuery<any>): unknown[] {
+		return query.statement.all(query.args);
 	}
 
 	/**
 	 * Writes to the modlog
-	 * @param overrideID Specify this parameter for when the room ID to be displayed
-	 * is different from the ID for the modlog stream
-	 * (The primary use case of this is tournament battles.)
 	 */
-	write(roomid: ModlogID, message: string, overrideID?: string) {
-		const stream = this.streams.get(roomid);
-		if (!stream) throw new Error(`Attempted to write to an uninitialized modlog stream for the room '${roomid}'`);
-		void stream.write(`[${new Date().toJSON()}] (${overrideID || roomid}) ${message}\n`);
+	write(roomid: string, entry: ModlogEntry, overrideID?: string) {
+		roomid = entry.roomID || roomid;
+		if (entry.isGlobal && roomid !== 'global' && !roomid.startsWith('global-')) roomid = `global-${roomid}`;
+		this.insertionTransaction({
+			action: entry.action,
+			roomID: roomid,
+			visualRoomID: overrideID || entry.visualRoomID,
+			userid: entry.userid,
+			autoconfirmedID: entry.autoconfirmedID,
+			ip: entry.ip,
+			loggedBy: entry.loggedBy,
+			note: entry.note,
+			time: entry.time || Date.now(),
+			alts: entry.alts,
+		});
 	}
 
-	async destroy(roomid: ModlogID) {
-		const stream = this.streams.get(roomid);
-		if (stream && !this.getSharedID(roomid)) {
-			this.streams.set(roomid, null);
-			await stream.writeEnd();
-		}
-		this.streams.set(roomid, null);
-	}
-
-	async destroyAll() {
-		const promises = [];
-		for (const id in this.streams) {
-			promises.push(this.destroy(id as ModlogID));
-		}
-		return Promise.all(promises);
-	}
-
-	async rename(oldID: ModlogID, newID: ModlogID) {
-		const streamExists = this.streams.has(oldID);
-		if (streamExists) await this.destroy(oldID);
-		if (!this.getSharedID(oldID)) {
-			await FS(`${this.logPath}/modlog_${oldID}.txt`).rename(`${this.logPath}/modlog_${newID}.txt`);
-		}
-		if (streamExists) this.initialize(newID);
-	}
-
-	getActiveStreamIDs() {
-		return [...this.streams.keys()];
+	rename(oldID: ModlogID, newID: ModlogID) {
+		if (oldID === newID) return;
+		void this.runSQL({statement: this.renameQuery, args: [newID, oldID]});
 	}
 
 	/******************************************
 	 * Methods for reading (searching) modlog *
 	 ******************************************/
-	 async runSearch(
-		rooms: ModlogID[], search: string, isExact: boolean, maxLines: number, onlyPunishments: boolean | string
-	) {
-		const useRipgrep = await checkRipgrepAvailability();
-		let fileNameList: string[] = [];
-		let checkAllRooms = false;
-		for (const roomid of rooms) {
-			if (roomid === 'all') {
-				checkAllRooms = true;
-				const fileList = await FS(this.logPath).readdir();
-				for (const file of fileList) {
-					if (file !== 'README.md' && file !== 'modlog_global.txt') fileNameList.push(file);
-				}
-			} else {
-				fileNameList.push(`modlog_${roomid}.txt`);
-			}
-		}
-		fileNameList = fileNameList.map(filename => `${this.logPath}/${filename}`);
-
-		// Ensure regexString can never be greater than or equal to the value of
+	generateRegex(search: string) {
+		// Ensure the generated regex can never be greater than or equal to the value of
 		// RegExpMacroAssembler::kMaxRegister in v8 (currently 1 << 16 - 1) given a
-		// searchString with max length MAX_QUERY_LENGTH. Otherwise, the modlog
+		// search with max length MAX_QUERY_LENGTH. Otherwise, the modlog
 		// child process will crash when attempting to execute any RegExp
 		// constructed with it (i.e. when not configured to use ripgrep).
-		let regexString;
-		if (!search) {
-			regexString = '.';
-		} else if (isExact) {
-			regexString = search.replace(/[\\.+*?()|[\]{}^$]/g, '\\$&');
-		} else {
-			search = toID(search);
-			regexString = `[^a-zA-Z0-9]${[...search].join('[^a-zA-Z0-9]*')}([^a-zA-Z0-9]|\\z)`;
+		return `[^a-zA-Z0-9]?${[...search].join('[^a-zA-Z0-9]*')}([^a-zA-Z0-9]|\\z)`;
+	}
+
+	formatArray(arr: unknown[], args: unknown[]) {
+		args.push(...arr);
+		return [...'?'.repeat(arr.length)].join(', ');
+	}
+
+	prepareSearch(
+		rooms: ModlogID[], maxLines: number, onlyPunishments: boolean, search: ModlogSearch
+	): ModlogQuery<string | number> {
+		for (const room of [...rooms]) {
+			rooms.push(`global-${room}` as ModlogID);
 		}
-		if (onlyPunishments) {
-			regexString = `${onlyPunishments === 'global' ? GLOBAL_PUNISHMENTS_REGEX_STRING : PUNISHMENTS_REGEX_STRING}${regexString}`;
+		const userid = toID(search.user);
+
+		const args: (string | number)[] = [];
+
+		let roomChecker = `roomid IN (${this.formatArray(rooms, args)})`;
+		if (rooms.includes('global')) roomChecker = `(roomid LIKE 'global-%' OR ${roomChecker})`;
+
+		let query = `SELECT *, (SELECT group_concat(userid, ',') FROM alts WHERE alts.modlog_id = modlog.modlog_id) as alts FROM modlog`;
+		query += ` WHERE ${roomChecker}`;
+
+		if (search.action) {
+			query += ` AND action LIKE '%' || ? || '%'`;
+			args.push(search.action);
+		} else if (onlyPunishments) {
+			query += ` AND action IN (${this.formatArray(PUNISHMENTS, args)})`;
 		}
 
-		const results = new SortedLimitedLengthList(maxLines);
-		if (useRipgrep) {
-			if (checkAllRooms) fileNameList = [this.logPath];
-			await this.runRipgrepSearch(fileNameList, regexString, results, maxLines);
-		} else {
-			const searchStringRegex = (search || onlyPunishments) ? new RegExp(regexString, 'i') : undefined;
-			for (const fileName of fileNameList) {
-				await this.readRoomModlog(fileName, results, searchStringRegex);
+		if (userid) {
+			query += ` AND (userid LIKE '%' || ? || '%' OR autoconfirmed_userid LIKE '%' || ? || '%' OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND userid LIKE '%' || ? || '%'))`;
+			args.push(userid, userid, userid);
+		}
+
+		if (search.ip) {
+			query += ` AND ip LIKE '%' || ? || '%'`;
+			args.push(search.ip);
+		}
+
+		if (search.actionTaker) {
+			query += ` AND action_taker_userid LIKE '%' || ? || '%'`;
+			args.push(search.actionTaker);
+		}
+
+		if (search.note) {
+			const parts = [];
+			for (const noteSearch of search.note.searches) {
+				if (!search.note.isExact) {
+					parts.push(`regex(?, note)`);
+					args.push(this.generateRegex(noteSearch));
+				} else {
+					parts.push(`note LIKE '%' || ? || '%'`);
+					args.push(noteSearch);
+				}
 			}
+			query += ` AND ${parts.join(' OR ')}`;
 		}
-		return results.getListClone().filter(Boolean);
+
+		query += ` ORDER BY timestamp DESC`;
+		if (maxLines) {
+			query += ` LIMIT ?`;
+			args.push(maxLines);
+		}
+		return {statement: this.database.prepare(query), args};
 	}
 
-	async runRipgrepSearch(paths: string[], regexString: string, results: SortedLimitedLengthList, lines: number) {
-		let output;
-		try {
-			const options = [
-				'-i',
-				'-m', '' + lines,
-				'--pre', 'tac',
-				'-e', regexString,
-				'--no-filename',
-				'--no-line-number',
-				...paths,
-				'-g', '!modlog_global.txt', '-g', '!README.md',
-			];
-			output = await execFile('rg', options, {cwd: normalizePath(`${__dirname}/../`)});
-		} catch (error) {
-			return results;
-		}
-		for (const fileName of output.stdout.split('\n').reverse()) {
-			if (fileName) results.insert(fileName);
-		}
-		return results;
+	getGlobalPunishments(user: User | string, days = 30) {
+		const userid = toID(user);
+		const args: (string | number)[] = [
+			userid, userid, userid, Date.now() - (days * 24 * 60 * 60 * 1000), ...GLOBAL_PUNISHMENTS,
+		];
+		const results = this.runSQLWithResults({statement: this.globalPunishmentsSearchQuery, args});
+		return results.length;
 	}
 
-	async getGlobalPunishments(user: User | string, days = 30) {
-		const response = await PM.query({
-			rooms: ['global' as ModlogID],
-			search: toID(user),
-			isExact: true,
-			maxLines: days * 10,
-			onlyPunishments: 'global',
-		});
-		return response.length;
-	}
+	search(
+		roomid: ModlogID = 'global',
+		search: ModlogSearch = {},
+		maxLines = 20,
+		onlyPunishments = false
+	): ModlogResults {
+		const rooms = (roomid === 'public' || roomid === 'all' ?
+			[...Rooms.rooms.values(), {roomid: 'global', settings: {isPrivate: false, isPersonal: false}}]
+				.filter(room => {
+					if (roomid === 'all') return true;
+					return !room.settings.isPrivate && !room.settings.isPersonal;
+				})
+				.map(room => room.roomid as ModlogID) :
+			[roomid]
+		);
 
-	async search(
-		roomid: ModlogID = 'global', search = '', maxLines = 20, exactSearch = false, onlyPunishments = false
-	): Promise<ModlogResults> {
-		const rooms = (roomid === 'public' ?
-			[...Rooms.rooms.values()]
-				.filter(room => !room.settings.isPrivate && !room.settings.isPersonal)
-				.map(room => room.roomid) :
-			[roomid]);
-
-		const query = {
-			rooms: rooms,
-			search: search,
-			isExact: exactSearch,
-			maxLines: maxLines,
-			onlyPunishments: onlyPunishments,
-		};
-		const response = await PM.query(query);
-
-		if (response.duration > LONG_QUERY_DURATION) {
-			Monitor.log(`Long modlog query took ${response.duration} ms to complete: ${query}`);
+		const query = this.prepareSearch(rooms, maxLines, onlyPunishments, search);
+		const start = Date.now();
+		const rows = this.runSQLWithResults(query) as AnyObject[];
+		const results: ModlogEntry[] = [];
+		for (const row of rows) {
+			if (!row.action) continue;
+			results.push({
+				action: row.action,
+				roomID: row.roomid?.replace(/^global-/, ''),
+				visualRoomID: row.visual_roomid,
+				userid: row.userid,
+				autoconfirmedID: row.autoconfirmed_userid,
+				alts: row.alts?.split(','),
+				ip: row.ip,
+				isGlobal: row.roomid?.startsWith('global-'),
+				loggedBy: row.action_taker_userid,
+				note: row.note,
+				time: row.timestamp,
+			});
 		}
-		return {results: response, duration: response.duration};
-	}
+		const duration = Date.now() - start;
 
-	private async readRoomModlog(path: string, results: SortedLimitedLengthList, regex?: RegExp) {
-		const fileStream = FS(path).createReadStream();
-		let line;
-		while ((line = await fileStream.readLine()) !== null) {
-			if (!regex || regex.test(line)) {
-				results.insert(line);
-			}
+		if (duration > LONG_QUERY_DURATION) {
+			Monitor.log(`Long modlog query took ${duration} ms to complete: ${query.statement.source}`);
 		}
-		void fileStream.destroy();
-		return results;
+		return {results, duration};
 	}
 }
 
-export const PM = new QueryProcessManager<ModlogQuery, string[] | undefined>(module, async data => {
-	const {rooms, search, isExact, maxLines, onlyPunishments} = data;
-	try {
-		return await modlog.runSearch(rooms, search, isExact, maxLines, onlyPunishments);
-	} catch (err) {
-		Monitor.crashlog(err, 'A modlog query', data);
-	}
-});
-if (!PM.isParentProcess) {
-	global.Config = require('./config-loader').Config;
-	global.toID = require('../sim/dex').Dex.toID;
-
-	// @ts-ignore ???
-	global.Monitor = {
-		crashlog(error: Error, source = 'A modlog process', details: {} | null = null) {
-			const repr = JSON.stringify([error.name, error.message, source, details]);
-			// @ts-ignore please be silent
-			process.send(`THROW\n@!!@${repr}\n${error.stack}`);
-		},
-	};
-
-	process.on('uncaughtException', err => {
-		if (Config.crashguard) {
-			Monitor.crashlog(err, 'A modlog child process');
-		}
-	});
-
-	// eslint-disable-next-line no-eval
-	Repl.start('modlog', cmd => eval(cmd));
-} else {
-	PM.spawn(MAX_PROCESSES);
-}
-
-export const modlog = new Modlog(MODLOG_PATH);
+export const modlog = new Modlog(MODLOG_DB_PATH);

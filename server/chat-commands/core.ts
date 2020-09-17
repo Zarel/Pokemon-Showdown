@@ -673,7 +673,7 @@ export const commands: ChatCommands = {
 
 			const displayReason = reason ? `: ${reason}` : ``;
 			this.privateModAction(room.tr`${targetUser.name}'s status "${targetUser.userMessage}" was cleared by ${user.name}${displayReason}.`);
-			this.globalModlog('CLEARSTATUS', targetUser, ` from "${targetUser.userMessage}" by ${user.name}${reason ? `: ${reason}` : ``}`);
+			this.globalModlog('CLEARSTATUS', targetUser, ` from "${targetUser.userMessage}"${displayReason}`);
 			targetUser.clearStatus();
 			targetUser.popup(`${user.name} has cleared your status message for being inappropriate${reason ? `: ${reason}` : '.'}`);
 			return;

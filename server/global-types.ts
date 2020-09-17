@@ -2,6 +2,7 @@ type Config = typeof import('../config/config-example') & AnyObject;
 
 type GroupSymbol = import('./user-groups').GroupSymbol;
 type AuthLevel = import('./user-groups').AuthLevel;
+type ModlogEntry = import('./modlog').ModlogEntry;
 
 /** not actually guaranteed to be one of these */
 type PunishType = '#chatfilter' | '#hostfilter' | '#dnsbl' | '#ipban';

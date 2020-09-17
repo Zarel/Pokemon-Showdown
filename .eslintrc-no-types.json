@@ -11,6 +11,7 @@
     "logs/",
     "node_modules/",
     ".*-dist/",
+    "tools/modlog/converter.js",
     "tools/set-import/importer.js",
     "tools/set-import/sets",
     "server/global-variables.d.ts",
@@ -189,7 +190,10 @@
   },
   "overrides": [
     {
-      "files": ["./config/*.ts", "./data/**/*.ts", "./lib/*.ts", "./server/**/*.ts", "./sim/**/*.ts", "./tools/set-import/*.ts"],
+      "files": [
+        "./config/*.ts", "./data/**/*.ts", "./lib/*.ts", "./server/**/*.ts", "./sim/**/*.ts",
+        "./tools/set-import/*.ts", "./tools/modlog/*.ts"
+      ],
       "parser": "@typescript-eslint/parser",
       "parserOptions": {
         "ecmaVersion": 9,

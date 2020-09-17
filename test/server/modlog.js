@@ -5,222 +5,166 @@
 
 'use strict';
 
-const TEST_PATH = 'test/modlogs';
-
-const {FS} = require('../../.lib-dist/fs');
-
 const ml = require('../../.server-dist/modlog');
-const modlog = new ml.Modlog(TEST_PATH);
+const modlog = new ml.Modlog(':memory:', true);
 const assert = require('assert').strict;
 
 const DATASET_A = [
-	`[2020-07-29T23:29:49.707Z] (readingtest) ROOMBAN: sometroll [127.0.0.1] by annika (FIRST ENTRY)`,
-	`[2020-07-29T23:29:49.717Z] (readingtest) LOCK: sometroll [127.0.0.1] by annika (ENTRY 2)`,
-	`[2020-07-29T23:29:49.72Z] (readingtest) ROOMBAN: sometroll [127.0.0.1] by annika (ENTRY 3)`,
-	`[2020-07-29T23:29:49.737Z] (readingtest) WEEKLOCK: sometroll [127.0.0.1] by annika (ENTRY 4)`,
-	`[2020-07-29T23:29:49.747Z] (readingtest) ROOMBAN: sometroll [127.0.0.1] by annika (ENTRY 5)`,
-	`[2020-07-29T23:29:49.757Z] (readingtest) ROOMBAN: sometroll [127.0.0.1] by annika (ENTRY 6)`,
-	`[2020-07-29T23:29:49.767Z] (readingtest) MUTE: sometroll [127.0.0.1] by annika (ENTRY 7)`,
-	`[2020-07-29T23:29:49.777Z] (readingtest) ROOMBAN: sometroll [127.0.0.1] by annika (ENTRY 8)`,
-	`[2020-07-29T23:29:49.787Z] (readingtest) ROOMBAN: sometroll [127.0.0.1] by annika (LAST ENTRY)`,
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'FIRST ENTRY', time: 1},
+	{action: 'LOCK', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'ENTRY 2', time: 2},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'ENTRY 3', time: 3},
+	{action: 'WEEKLOCK', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'this entry has many parts', time: 4},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'ENTRY 5', time: 5},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'ENTRY 6', time: 6},
+	{action: 'MUTE', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'ENTRY 7', time: 7},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'ENTRY 8', time: 8},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika', note: 'LAST ENTRY', time: 9},
 ];
 
 const DATASET_B = [
-	`[2020-07-29T23:29:49.797Z] (readingtest2) ROOMBAN: sometroll [127.0.0.1] by annika`,
-	`[2020-07-29T23:29:49.807Z] (readingtest2) ROOMBAN: sometroll [127.0.0.1] by annika`,
-	`[2020-07-29T23:29:49.817Z] (readingtest2) POLL: by annika`,
-	`[2020-07-29T23:29:49.827Z] (readingtest2) ROOMBAN: sometroll [127.0.0.1] by annika`,
-	`[2020-07-29T23:29:49.837Z] (readingtest2) TOUR START: by annika`,
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika'},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika'},
+	{action: 'POLL', loggedBy: 'annika'},
+	{action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', loggedBy: 'annika'},
+	{action: 'TOUR START', loggedBy: 'annika'},
 ];
 
-/**
- * Normalizes a modlog entry, handling timestamps and the like.
- */
-const normalizeModlogEntry = (entry) => entry.replace(/\[[^\]]+\]/, `[TIMESTAMP]`);
-
-async function getLines(roomid) {
-	const lines = (await FS(`${TEST_PATH}/modlog_${modlog.getSharedID(roomid) || roomid}.txt`).read()).split('\n');
-	let lastLine;
-	while (!lastLine) lastLine = lines.pop();
-	if (!lastLine) throw new Error(`No modlog lines written.`);
-	return {lastLine, lines};
+function lastLine(database, roomid) {
+	return database.prepare(
+		`SELECT * FROM modlog WHERE roomid = ? ORDER BY modlog_id DESC LIMIT 1`
+	).get(roomid);
 }
 
-describe('Modlog (without FS writes)', () => {
-	it('should correctly determine if a room has a shared modlog', () => {
-		assert.ok(modlog.getSharedID('battle-gen8randombattle-42'));
-		assert.ok(modlog.getSharedID('groupchat-annika-shitposting'));
-		assert.ok(modlog.getSharedID('help-mePleaseIAmTrappedInAUnitTestFactory'));
+describe('Modlog', () => {
+	describe('Modlog#prepareSearch', () => {
+		it('should respect the maxLines parameter', () => {
+			const query = modlog.prepareSearch(['lobby'], 1337, false, {});
+			assert.ok(query.statement.source.endsWith('LIMIT ?'));
+			assert.ok(query.args.includes(1337));
 
-		assert.ok(!modlog.getSharedID('1v1'));
-		assert.ok(!modlog.getSharedID('development'));
+			const noMaxLines = modlog.prepareSearch(['lobby'], 0, false, {}).statement;
+			assert.ok(!noMaxLines.source.toUpperCase().includes('LIMIT'));
+		});
+
+		it('should attempt to respect onlyPunishments', () => {
+			const query = modlog.prepareSearch(['lobby'], 0, true, {});
+			assert.ok(query.statement.source.includes('action IN ('));
+			assert.ok(query.args.includes('WEEKLOCK'));
+		});
 	});
 
-	it('should throw an error when writing to a destroyed modlog stream', () => {
-		modlog.initialize('somedeletedroom');
-		assert.doesNotThrow(() => modlog.write('somedeletedroom', 'ROOMBAN: sometroll [127.0.0.1] by annika'));
-		modlog.destroy('somedeletedroom');
-		assert.throws(() => modlog.write('somedeletedroom', 'ROOMBAN: sometroll [127.0.0.1] by annika'));
+	describe('Writing to modlog', () => {
+		it('should write messages serially to the modlog', async () => {
+			modlog.write('development', {note: 'This message is logged first', action: 'UNITTEST'});
+			modlog.write('development', {note: 'This message is logged second', action: 'UNITTEST'});
+			const lines = modlog.database.prepare(
+				// Order by modlog_id since the writes most likely happen at the same second
+				`SELECT * FROM modlog WHERE roomid = 'development' ORDER BY modlog_id DESC LIMIT 2`
+			).all();
+
+			assert.strictEqual(lines.pop().note, 'This message is logged first');
+			assert.strictEqual(lines.pop().note, 'This message is logged second');
+		});
+
+		it('should support renaming modlogs', async () => {
+			const entry = {note: 'This is in a modlog that will be renamed!', action: 'UNITTEST'};
+			await modlog.write('oldroom', entry);
+			modlog.rename('oldroom', 'newroom');
+
+			const line = lastLine(modlog.database, 'newroom');
+
+			assert.strictEqual(entry.action, line.action);
+			assert.strictEqual(entry.note, line.note);
+
+			const newEntry = {note: 'This modlog has been renamed!', action: 'UNITTEST'};
+			await modlog.write('newroom', newEntry);
+
+			const newLine = lastLine(modlog.database, 'newroom');
+
+			assert.strictEqual(newEntry.action, newLine.action);
+			assert.strictEqual(newEntry.note, newLine.note);
+		});
+
+		it('should use overrideID if specified', async () => {
+			await modlog.write('battle-gen8randombattle-1337', {note: "I'm testing overrideID", action: 'UNITTEST'}, 'heyadora');
+
+			const line = lastLine(modlog.database, 'battle-gen8randombattle-1337');
+			assert.strictEqual(line.note, "I'm testing overrideID");
+			assert.strictEqual(line.visual_roomid, 'heyadora');
+		});
 	});
 
-	it('should throw an error when writing to an uninitialized modlog stream', () => {
-		assert.throws(() => modlog.write('lmaothisroomisntreal', 'ROOMBAN: sometroll [127.0.0.1] by annika'));
-		modlog.initialize('itsrealnow');
-		assert.doesNotThrow(() => modlog.write('itsrealnow', 'ROOMBAN: sometroll [127.0.0.1] by annika'));
-	});
-});
+	describe('Searching modlog', () => {
+		before(async () => {
+			for (const entry of DATASET_A) {
+				await modlog.write('readingtest', entry);
+			}
+			for (const entry of DATASET_B) {
+				await modlog.write('readingtest2', entry);
+			}
+		});
 
-describe.skip('Modlog (with FS writes)', () => {
-	before(async () => {
-		/**
-		 * Some modlog tests involve writing to the filesystem.
-		 * Filesystem writes are disabled again in after(),
-		 * so this only affects tests in this describe().
-		 */
-		Config.nofswriting = false;
+		it('should be capable of reading the entire modlog file', async () => {
+			const results = await modlog.search('readingtest2', {}, 10000);
+			assert.equal(results.results.length, DATASET_B.length);
+		});
 
-		await FS(TEST_PATH).mkdirp();
-		await FS(`${TEST_PATH}/modlog_readingtest.txt`).write(DATASET_A.join('\n') + '\n');
-		await FS(`${TEST_PATH}/modlog_readingtest2.txt`).write(DATASET_B.join('\n') + '\n');
-	});
+		it('user searches should be case-insensitive', async () => {
+			const notExactUpper = await modlog.search('readingtest', {user: {search: 'sOmETRoll', isExact: false}});
+			const notExactLower = await modlog.search('readingtest', {user: {search: 'sometroll', isExact: false}});
+			const exactUpper = await modlog.search('readingtest', {user: {search: 'sOMEtroLL', isExact: true}});
+			const exactLower = await modlog.search('readingtest', {user: {search: 'sometroll', isExact: true}});
 
-	after(async () => {
-		// This currently fails on Windows; it fails to remove
-		// the directory and crashes as a result
-		await FS(TEST_PATH).rmdir(true);
-		Config.nofswriting = true;
-	});
+			assert.deepStrictEqual(notExactUpper.results, notExactLower.results);
+			assert.deepStrictEqual(exactUpper.results, exactLower.results);
+		});
 
-	/*******************************
-	 * Tests for writing to modlog *
-	 *******************************/
-	it('should write messages serially to the modlog', async () => {
-		modlog.initialize('development');
-		modlog.write('development', 'ROOMOWNER: [somecooluser] by someadmin');
-		modlog.write('development', 'ROOMBAN: [kjnhvgcfg] [127.0.0.1] by annika');
-		await modlog.destroy('development'); // ensure all writes have synced to disk
+		it('note searches should respect isExact', async () => {
+			const notExact = await modlog.search('readingtest', {note: {searches: ['has man'], isExact: false}});
+			const exact = await modlog.search('readingtest', {note: {searches: ['has man'], isExact: true}});
+			assert.strictEqual(notExact.results.length, 0);
+			assert.ok(exact.results.length);
+		});
 
-		const lines = await getLines('development');
+		it.skip('should be LIFO (last-in, first-out)', async () => {
+			await modlog.write('lifotest', {note: 'firstwrite', action: 'UNITTEST', timestamp: 1});
+			await modlog.write('lifotest', {note: 'secondwrite', action: 'UNITTEST', timestamp: 2});
+			const search = await modlog.search('lifotest');
+			assert.strictEqual(search.results.length, 2);
 
-		assert.equal(
-			normalizeModlogEntry(lines.lastLine),
-			normalizeModlogEntry('[2020-07-29T23:29:49.797Z] (development) ROOMBAN: [kjnhvgcfg] [127.0.0.1] by annika')
-		);
-		assert.equal(
-			normalizeModlogEntry(lines.lines.pop()),
-			normalizeModlogEntry('[2020-07-29T23:29:49.797Z] (development) ROOMOWNER: [somecooluser] by someadmin')
-		);
-	});
+			assert.ok(search.results[0].note !== 'secondwrite');
+			assert.ok(search.results[0].note === 'firstwrite');
 
-	it('should support renaming modlogs', async () => {
-		const message = 'ROOMREGULAR USER: [somerandomreg] by annika (demote)';
-		// Modlog renaming tests should pass whether or not the room names within the file are changed
-		const messageRegex = /\[[^\]]+\] \((oldroom|newroom)\) ROOMREGULAR USER: \[somerandomreg\] by annika \(demote\)/;
-		modlog.initialize('oldroom');
-		modlog.write('oldroom', message);
-		await modlog.rename('oldroom', 'newroom');
+			assert.ok(search.results[1].note !== 'firstwrite');
+			assert.ok(search.results[1].note === 'secondwrite');
+		});
 
-		assert.ok(FS(`${TEST_PATH}/modlog_newroom.txt`).existsSync());
-		assert.throws(() => modlog.write('oldroom', 'something'));
+		it('should support limiting the number of responses', async () => {
+			const unlimited = await modlog.search('readingtest');
+			const limited = await modlog.search('readingtest', {}, 5);
 
-		let lastLine = (await getLines('newroom')).lastLine;
-		assert.ok(messageRegex.test(lastLine));
+			assert.equal(limited.results.length, 5);
+			assert.ok(unlimited.results.length > limited.results.length);
 
-		modlog.write('newroom', 'ROOMBAN: [kjnhvgcfg] [127.0.0.1] by annika');
-		await modlog.destroy('newroom'); // ensure all writes have synced to disk
+			assert.ok(limited.results[0].note.includes('LAST ENTRY'));
+			assert.ok(unlimited.results[0].note.includes('LAST ENTRY'));
 
-		lastLine = (await getLines('newroom')).lastLine;
-		assert.strictEqual(
-			normalizeModlogEntry(lastLine),
-			normalizeModlogEntry('[2020-07-29T23:29:49.797Z] (newroom) ROOMBAN: [kjnhvgcfg] [127.0.0.1] by annika')
-		);
-	});
+			const limitedLast = limited.results.pop().note;
+			const unlimitedLast = unlimited.results.pop().note;
 
-	it('should use overrideID if specified', async () => {
-		modlog.initialize('battle-gen8randombattle-1337');
-		modlog.write('battle-gen8randombattle-1337', 'MODCHAT: by annika: to +', 'actually this: cool name');
-		await modlog.destroy('battle-gen8randombattle-1337'); // ensure all writes have synced to disk
+			assert.ok(!limitedLast.includes('FIRST ENTRY'));
+			assert.ok(unlimitedLast.includes('FIRST ENTRY'));
+		});
 
-		const lastLine = (await getLines('battle-gen8randombattle-1337')).lastLine;
-		assert.strictEqual(
-			normalizeModlogEntry(lastLine),
-			normalizeModlogEntry('[2020-07-29T23:29:49.797Z] (actually this: cool name) MODCHAT: by annika: to +')
-		);
-	});
+		it('should support filtering out non-punishment-related logs', async () => {
+			const all = (await modlog.search('readingtest2', {}, 20, false)).results;
+			const onlyPunishments = (await modlog.search('readingtest2', {}, 20, true)).results;
 
-	/**************************************
-	 * Tests for reading/searching modlog *
-	 **************************************/
-	it('should read the entire modlog file when not limited', async () => {
-		const results = await modlog.runSearch(['readingtest'], '', false, 10000, false);
-		assert.equal(results.length, DATASET_A.length);
-	});
-
-	it("should support searching multiple rooms' modlogs", async () => {
-		const results = await modlog.runSearch(['readingtest', 'readingtest2'], '', false, 10000, false);
-		assert.equal(results.length, DATASET_A.length + DATASET_B.length);
-	});
-
-	it('should be case-insensitive', async () => {
-		const notExactUpper = await modlog.runSearch(['readingtest'], 'someTRoll', false, 10000, false);
-		const notExactLower = await modlog.runSearch(['readingtest'], 'someTRoll', false, 10000, false);
-		const exactUpper = await modlog.runSearch(['readingtest'], 'sOmEtRoLl', true, 10000, false);
-		const exactLower = await modlog.runSearch(['readingtest'], 'sOmEtRoLl', true, 10000, false);
-
-		assert.deepStrictEqual(notExactUpper, notExactLower);
-		assert.deepStrictEqual(exactUpper, exactLower);
-	});
-
-	it('should respect isExact', async () => {
-		const notExact = await modlog.runSearch(['readingtest'], 'troll', false, 10000, false);
-		const exact = await modlog.runSearch(['readingtest'], 'troll', true, 10000, false);
-
-		assert.strictEqual(notExact.length, 0);
-		assert.ok(exact.length);
-	});
-
-	it('should be LIFO (last-in, first-out)', async () => {
-		modlog.initialize('lifotest');
-		modlog.write('lifotest', 'firstwrite');
-		modlog.write('lifotest', 'secondwrite');
-		await modlog.destroy('lifotest');
-
-		const search = await modlog.runSearch(['lifotest'], '', false, 10000, false);
-
-		assert.strictEqual(search.length, 2);
-
-		assert.ok(search[0].includes('secondwrite'));
-		assert.ok(!search[0].includes('firstwrite'));
-
-		assert.ok(search[1].includes('firstwrite'));
-		assert.ok(!search[1].includes('secondwrite'));
-	});
-
-	it('should support limiting the number of responses', async () => {
-		const unlimited = await modlog.runSearch(['readingtest'], '', false, 10000, false);
-		const limited = await modlog.runSearch(['readingtest'], '', false, 5, false);
-
-		assert.equal(limited.length, 5);
-		assert.ok(unlimited.length > limited.length);
-
-		assert.ok(limited[0].includes('LAST ENTRY'));
-		assert.ok(unlimited[0].includes('LAST ENTRY'));
-
-		const limitedLast = limited.pop();
-		const unlimitedLast = unlimited.pop();
-
-		assert.ok(!limitedLast.includes('FIRST ENTRY'));
-		assert.ok(unlimitedLast.includes('FIRST ENTRY'));
-	});
-
-	it('should support filtering out non-punishment-related logs', async () => {
-		const all = await modlog.runSearch(['readingtest2'], '', false, 10000, false);
-		const onlyPunishments = await modlog.runSearch(['readingtest2'], '', false, 10000, true);
-
-		assert.ok(all.length > onlyPunishments.length);
-		assert.strictEqual(
-			onlyPunishments.filter(result => result.includes('ROOMBAN')).length,
-			onlyPunishments.length
-		);
+			assert.ok(all.length > onlyPunishments.length);
+			assert.strictEqual(
+				onlyPunishments.filter(result => result.action === 'ROOMBAN').length,
+				onlyPunishments.length
+			);
+		});
 	});
 });

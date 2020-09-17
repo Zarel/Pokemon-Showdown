@@ -1,0 +1,43 @@
+#!/usr/bin/env node
+
+/**
+ * This script can be used to convert databases from one format to another
+ * Format:
+ * `node tools/modlog/convert --db path/to/database --logdir path/to/modlogs --from <database format> --to <database format>`
+ * Usage example:
+ * `node tools/modlog/convert --db databases/modlog.db --logdir logs/modlog --from txt --to sqlite`
+ * @author jetou
+ */
+
+'use strict';
+
+const ModlogConverter = require(`${__dirname}/converter.js`).ModlogConverter;
+
+function parseFlags() {
+	const args = process.argv.slice(2);
+	const flags = Object.create(null);
+	for (const [idx, arg] of args.entries()) {
+		if (idx % 2 === 0) {
+			flags[arg] = args[idx + 1];
+		}
+	}
+	return flags;
+}
+
+const flags = parseFlags();
+
+const databasePath = flags['--db'];
+const textLogPath = flags['--logdir'];
+const from = flags['--from'];
+const to = flags['--to'];
+
+if (!(databasePath && textLogPath && from && to) || !['txt', 'sqlite'].includes(from) || !['txt', 'sqlite'].includes(to)) {
+	throw new Error(`Invalid arguments specified.\nUsage: node tools/modlog/convert --db path/to/database --logdir path/to/modlogs --from <database format> --to <database format>.`);
+}
+
+if (from === to) {
+	throw new Error(`Cannot convert to the same storage format.`);
+}
+
+console.log(`Converting ${from === 'txt' ? `the text modlog files in ${textLogPath}` : `${databasePath}`} from ${from} to ${to}...`);
+ModlogConverter.convert(from, to, databasePath, textLogPath);

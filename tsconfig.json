@@ -22,6 +22,7 @@
         "./lib/*",
         "./server/**/*.ts",
         "./sim/**/*",
-        "./tools/set-import/*.ts"
+        "./tools/set-import/*.ts",
+        "./tools/modlog/*.ts"
     ]
 }

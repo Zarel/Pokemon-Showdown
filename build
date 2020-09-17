@@ -112,7 +112,7 @@ function sucrase(src, out, opts) {
 if (sucrase('./config', './.config-dist')) {
 	replace('.config-dist', [
 		{regex: /(require\(.*?)(lib|sim)/g, replace: `$1.$2-dist`},
-	]);	
+	]);
 }
 
 if (sucrase('./data', './.data-dist')) {
@@ -138,6 +138,12 @@ if (sucrase('./server', './.server-dist')) {
 if (sucrase('./tools/set-import', './tools/set-import', '--exclude-dirs=sets')) {
 	replace('./tools/set-import/importer.js', [
 		{regex: /(require\(.*?)(lib|sim)/g, replace: `$1.$2-dist`},
+	]);
+}
+
+if (sucrase('./tools/modlog', './tools/modlog')) {
+	replace('./tools/modlog/converter.js', [
+		{regex: /(require\(.*?)(lib|server)/g, replace: `$1.$2-dist`},
 	]);
 }
 

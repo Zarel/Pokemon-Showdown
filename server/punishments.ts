@@ -750,9 +750,14 @@ export const Punishments = new class {
 			Monitor.log(`[CrisisMonitor] Autolocked user ${name} has public roomauth (${roomauth.join(', ')}), and should probably be demoted.`);
 		}
 
-		const ipStr = typeof user !== 'string' ? ` [${(user as User).latestIp}]` : '';
-		const roomid = typeof room !== 'string' ? (room as Room).roomid : room;
-		Rooms.global.modlog(`AUTO${punishment.replace('ED', '')}: [${userid}]${ipStr}: ${reason}`, roomid);
+		const logEntry: ModlogEntry = {
+			action: `AUTO${punishment.replace('ED', '')}`,
+			visualRoomID: typeof room !== 'string' ? (room as Room).roomid : room,
+			userid: userid,
+			note: reason,
+		};
+		if (typeof user !== 'string') logEntry.ip = (user as User).latestIp;
+		Rooms.global.modlog(logEntry);
 
 		const roomObject = Rooms.get(room);
 		const userObject = Users.get(user);
