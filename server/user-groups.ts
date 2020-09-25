@@ -29,6 +29,7 @@ export type GroupInfo = {
 	inherit?: GroupSymbol,
 	jurisdiction?: string,
 
+	isStaff: boolean,
 	globalonly?: boolean,
 	roomonly?: boolean,
 	battleonly?: boolean,
@@ -56,7 +57,7 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 		return super.get(user) || Auth.defaultSymbol();
 	}
 	isStaff(userid: ID) {
-		return this.has(userid) && this.get(userid) !== '+';
+		return !!Auth.getGroup(this.getEffectiveSymbol(userid)).isStaff;
 	}
 	atLeast(user: User, group: AuthLevel) {
 		if (user.hasSysopAccess()) return true;
@@ -89,9 +90,9 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 			name: symbol,
 		});
 	}
-	getEffectiveSymbol(user: User): EffectiveGroupSymbol {
+	getEffectiveSymbol(user: ID | User): EffectiveGroupSymbol {
 		const group = this.get(user);
-		if (this.has(user.id) && group === Auth.defaultSymbol()) {
+		if (this.has(toID(user)) && group === Auth.defaultSymbol()) {
 			return 'whitelist';
 		}
 		return group;

@@ -48,7 +48,7 @@ export function cacheGroupData(config: ConfigType) {
 	const cachedGroups: {[k: string]: 'processing' | true} = {};
 
 	function isPermission(key: string) {
-		return !['symbol', 'id', 'name', 'rank', 'globalGroupInPersonalRoom'].includes(key);
+		return !['symbol', 'id', 'name', 'rank', 'isStaff', 'globalGroupInPersonalRoom'].includes(key);
 	}
 	function cacheGroup(symbol: string, groupData: GroupInfo) {
 		if (cachedGroups[symbol] === 'processing') {
@@ -103,6 +103,13 @@ export function cacheGroupData(config: ConfigType) {
 	for (const sym in groups) {
 		const groupData = groups[sym];
 		cacheGroup(sym, groupData);
+	}
+
+	if ([...Object.values(groups)].every(group => !group.hasOwnProperty('isStaff'))) {
+		// config (presumably) hasn't been updated for isStaff, infer it
+		for (const sym in groups) {
+			groups[sym].isStaff = !!groups[sym].mute;
+		}
 	}
 
 	// hardcode default punishgroups.
