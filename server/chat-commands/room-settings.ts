@@ -779,11 +779,15 @@ export const commands: ChatCommands = {
 
 		const titleMsg = Utils.html`Welcome to ${parent ? room.title : user.name}'s` +
 			`${!/^[0-9]+$/.test(title) ? ` ${title}` : ''}${parent ? ' subroom' : ''} groupchat!`;
-		const targetRoom = Rooms.createChatRoom(roomid, `[G] ${title}`, {
+		const defaultSettings = {
 			isPersonal: true,
 			isPrivate: 'hidden',
 			creationTime: Date.now(),
 			modjoin: parent ? null : '+',
+		};
+		const settings = parent ? room.settings : defaultSettings;
+		const targetRoom = Rooms.createChatRoom(roomid, `[G] ${title}`, {
+			...settings,
 			parentid: parent,
 			auth: {},
 			introMessage: `` +
