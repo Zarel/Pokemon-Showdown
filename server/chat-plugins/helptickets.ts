@@ -10,48 +10,38 @@ const TICKET_BAN_DURATION = 48 * 60 * 60 * 1000; // 48 hours
 Punishments.roomPunishmentTypes.set(`TICKETBAN`, 'banned from creating help tickets');
 
 interface TicketState {
-	creator: string;
-	userid: ID;
-	open: boolean;
-	active: boolean;
-	type: string;
-	created: number;
-	claimed: string | null;
-	ip: string;
+	readonly creator: string;
+	readonly userid: ID;
+	readonly open: boolean;
+	readonly active: boolean;
+	readonly type: string;
+	readonly created: number;
+	readonly claimed: string | null;
+	readonly ip: string;
+	readonly resolution?: 'unknown' | 'dead' | 'unresolved' | 'resolved';
+	readonly result: TicketResult | null;
+	readonly claimQueue?: string[];
+	readonly involvedStaff?: ID[];
+	readonly createTime?: number;
+	readonly emptyRoom?: boolean;
+	readonly firstClaimTime?: number;
+	readonly unclaimedTime?: number;
 }
 type TicketResult = 'approved' | 'valid' | 'assisted' | 'denied' | 'invalid' | 'unassisted' | 'ticketban' | 'deleted';
 
-const tickets: {[k: string]: TicketState} = {};
-
-try {
-	const ticketData = JSON.parse(FS(TICKET_FILE).readSync());
-	for (const t in ticketData) {
-		const ticket = ticketData[t];
-		if (ticket.banned) {
-			if (ticket.expires && ticket.expires <= Date.now()) continue;
-			Punishments.roomPunish(`staff`, ticket.userid, ['TICKETBAN', ticket.userid, ticket.expires, ticket.reason]);
-			delete ticketData[t]; // delete the old format
-		} else {
-			if (ticket.created + TICKET_CACHE_TIME <= Date.now()) {
-				// Tickets that have been open for 24+ hours will be automatically closed.
-				const ticketRoom = Rooms.get(`help-${ticket.userid}`) as ChatRoom | null;
-				if (ticketRoom) {
-					const ticketGame = ticketRoom.game as HelpTicket;
-					ticketGame.writeStats(false);
-					ticketRoom.expire();
-				}
-				continue;
-			}
-			// Close open tickets after a restart
-			if (ticket.open && !Chat.oldPlugins.helptickets) ticket.open = false;
-			tickets[t] = ticket;
-		}
+function getTickets() {
+	const tickets: {[k: string]: TicketState} = {};
+	for (const room of Rooms.rooms.values()) {
+		if (!room.settings.isHelp || !room.game) continue;
+		const ticket = room.getGame(HelpTicket)!;
+		if (!ticket.open) continue;
+		tickets[ticket.userid] = ticket.toJSON();
 	}
-} catch (e) {
-	if (e.code !== 'ENOENT') throw e;
+	return tickets;
 }
 
 function writeTickets() {
+	const tickets = getTickets();
 	FS(TICKET_FILE).writeUpdate(() => (
 		JSON.stringify(Object.assign({}, tickets))
 	));
@@ -70,7 +60,6 @@ function writeStats(line: string) {
 
 export class HelpTicket extends Rooms.RoomGame {
 	room: ChatRoom;
-	ticket: TicketState;
 	claimQueue: string[];
 	involvedStaff: Set<ID>;
 	createTime: number;
@@ -82,53 +71,88 @@ export class HelpTicket extends Rooms.RoomGame {
 	closeTime: number;
 	resolution: 'unknown' | 'dead' | 'unresolved' | 'resolved';
 	result: TicketResult | null;
+	creator: string;
+	userid: ID;
+	open: boolean;
+	active: boolean;
+	type: string;
+	created: number;
+	claimed: string | null;
+	ip: string;
 
-	constructor(room: ChatRoom, ticket: TicketState) {
+	constructor(room: ChatRoom, options: TicketState) {
 		super(room);
 		this.room = room;
-		this.room.settings.language = Users.get(ticket.creator)?.language || 'english';
-		this.title = `Help Ticket - ${ticket.type}`;
+		this.room.settings.language = Users.get(options.creator)?.language || 'english';
+		this.title = `Help Ticket - ${options.type}`;
 		this.gameid = "helpticket" as ID;
 		this.allowRenames = true;
-		this.ticket = ticket;
-		this.claimQueue = [];
+		this.claimQueue = options.claimQueue || [];
+		this.creator = options.creator;
+		this.userid = toID(options.creator);
+		this.open = options.open !== undefined ? options.open : true;
+		this.active = !!options.active;
+		this.type = options.type;
+		this.created = options.created || Date.now();
+		this.claimed = options.claimed || null;
+		this.ip = options.ip;
 
 		/* Stats */
-		this.involvedStaff = new Set();
-		this.createTime = Date.now();
-		this.activationTime = (ticket.active ? this.createTime : 0);
-		this.emptyRoom = false;
-		this.firstClaimTime = 0;
-		this.unclaimedTime = 0;
-		this.lastUnclaimedStart = (ticket.active ? this.createTime : 0);
+		this.involvedStaff = new Set(options.involvedStaff || []);
+		this.createTime = options.createTime || Date.now();
+		this.activationTime = (options.active ? this.createTime : 0);
+		this.emptyRoom = options.emptyRoom || false;
+		this.firstClaimTime = options.firstClaimTime || 0;
+		this.unclaimedTime = options.unclaimedTime || 0;
+		this.lastUnclaimedStart = (options.active ? this.createTime : 0);
 		this.closeTime = 0;
-		this.resolution = 'unknown';
-		this.result = null;
+		this.resolution = options.resolution || 'unknown';
+		this.result = options.result || null;
+	}
+
+	toJSON() {
+		const entry: TicketState = {
+			creator: this.creator,
+			userid: this.userid,
+			open: this.open,
+			active: this.active,
+			type: this.type,
+			created: this.created,
+			claimed: this.claimed,
+			ip: this.ip,
+			resolution: this.resolution,
+			result: this.result,
+			claimQueue: this.claimQueue,
+			involvedStaff: [...this.involvedStaff],
+			createTime: this.createTime,
+			firstClaimTime: this.firstClaimTime,
+			unclaimedTime: this.unclaimedTime,
+		};
+		return entry;
 	}
 
 	onJoin(user: User, connection: Connection) {
-		if (!this.ticket.open) return false;
-		if (!user.isStaff || user.id === this.ticket.userid) {
+		if (!this.open) return false;
+		if (!user.isStaff || user.id === this.userid) {
 			if (this.emptyRoom) this.emptyRoom = false;
 			this.addPlayer(user);
 			return false;
 		}
-		if (!this.ticket.claimed) {
-			this.ticket.claimed = user.name;
+		if (!this.claimed) {
+			this.claimed = user.name;
 			if (!this.firstClaimTime) {
 				this.firstClaimTime = Date.now();
 				// I'd use the player list for this, but it dosen't track DCs so were checking the userlist
 				// Non-staff users in the room currently (+ the ticket creator even if they are staff)
 				const users = Object.entries(this.room.users).filter(u => {
-					return !((u[1].isStaff && u[1].id !== this.ticket.userid) || !u[1].named);
+					return !((u[1].isStaff && u[1].id !== this.userid) || !u[1].named);
 				});
 				if (!users.length) this.emptyRoom = true;
 			}
-			if (this.ticket.active) {
+			if (this.active) {
 				this.unclaimedTime += Date.now() - this.lastUnclaimedStart;
 				this.lastUnclaimedStart = 0; // Set back to 0 so we know that it was active when closed
 			}
-			tickets[this.ticket.userid] = this.ticket;
 			writeTickets();
 			this.room.modlog({action: 'TICKETCLAIM', isGlobal: true, loggedBy: user.id});
 			this.addText(`${user.name} claimed this ticket.`, user);
@@ -144,21 +168,20 @@ export class HelpTicket extends Rooms.RoomGame {
 			this.removePlayer(player);
 			return;
 		}
-		if (!this.ticket.open) return;
-		if (toID(this.ticket.claimed) === user.id) {
+		if (!this.open) return;
+		if (toID(this.claimed) === user.id) {
 			if (this.claimQueue.length) {
-				this.ticket.claimed = this.claimQueue.shift() || null;
-				this.room.modlog({action: 'TICKETCLAIM', isGlobal: true, loggedBy: toID(this.ticket.claimed)});
-				this.addText(`This ticket is now claimed by ${this.ticket.claimed}.`, user);
+				this.claimed = this.claimQueue.shift() || null;
+				this.room.modlog({action: 'TICKETCLAIM', isGlobal: true, loggedBy: toID(this.claimed)});
+				this.addText(`This ticket is now claimed by ${this.claimed}.`, user);
 			} else {
-				const oldClaimed = this.ticket.claimed;
-				this.ticket.claimed = null;
+				const oldClaimed = this.claimed;
+				this.claimed = null;
 				this.lastUnclaimedStart = Date.now();
 				this.room.modlog({action: 'TICKETUNCLAIM', isGlobal: true, loggedBy: toID(oldClaimed)});
 				this.addText(`This ticket is no longer claimed.`, user);
 				notifyStaff();
 			}
-			tickets[this.ticket.userid] = this.ticket;
 			writeTickets();
 		} else {
 			const index = this.claimQueue.map(toID).indexOf(user.id);
@@ -167,24 +190,24 @@ export class HelpTicket extends Rooms.RoomGame {
 	}
 
 	onLogMessage(message: string, user: User) {
-		if (!this.ticket.open) return;
-		if (user.isStaff && this.ticket.userid !== user.id) this.involvedStaff.add(user.id);
-		if (this.ticket.active) return;
+		if (!this.open) return;
+		if (user.isStaff && this.userid !== user.id) this.involvedStaff.add(user.id);
+		if (this.active) return;
 		const blockedMessages = [
 			'hi', 'hello', 'hullo', 'hey', 'yo', 'ok',
 			'hesrude', 'shesrude', 'hesinappropriate', 'shesinappropriate', 'heswore', 'sheswore',
 			'help', 'yes',
 		];
-		if ((!user.isStaff || this.ticket.userid === user.id) && blockedMessages.includes(toID(message))) {
+		if ((!user.isStaff || this.userid === user.id) && blockedMessages.includes(toID(message))) {
 			this.room.add(`|c|&Staff|${this.room.tr`Hello! The global staff team would be happy to help you, but you need to explain what's going on first.`}`);
 			this.room.add(`|c|&Staff|${this.room.tr`Please post the information I requested above so a global staff member can come to help.`}`);
 			this.room.update();
 			return false;
 		}
-		if ((!user.isStaff || this.ticket.userid === user.id) && !this.ticket.active) {
-			this.ticket.active = true;
+		if ((!user.isStaff || this.userid === user.id) && !this.active) {
+			this.active = true;
 			this.activationTime = Date.now();
-			if (!this.ticket.claimed) this.lastUnclaimedStart = Date.now();
+			if (!this.claimed) this.lastUnclaimedStart = Date.now();
 			notifyStaff();
 			this.room.add(`|c|&Staff|${this.room.tr`Thank you for the information, global staff will be here shortly. Please stay in the room.`}`).update();
 		}
@@ -193,7 +216,7 @@ export class HelpTicket extends Rooms.RoomGame {
 	forfeit(user: User) {
 		if (!(user.id in this.playerTable)) return;
 		this.removePlayer(user);
-		if (!this.ticket.open) return;
+		if (!this.open) return;
 		this.room.modlog({action: 'TICKETABANDON', isGlobal: true, loggedBy: user.id});
 		this.addText(`${user.name} is no longer interested in this ticket.`, user);
 		if (this.playerCount - 1 > 0) return; // There are still users in the ticket room, dont close the ticket
@@ -211,18 +234,18 @@ export class HelpTicket extends Rooms.RoomGame {
 	}
 
 	getButton() {
-		const notifying = this.ticket.claimed ? `` : `notifying`;
+		const notifying = this.claimed ? `` : `notifying`;
 		const creator = (
-			this.ticket.claimed ? Utils.html`${this.ticket.creator}` : Utils.html`<strong>${this.ticket.creator}</strong>`
+			this.claimed ? Utils.html`${this.creator}` : Utils.html`<strong>${this.creator}</strong>`
 		);
 		return (
-			`<a class="button ${notifying}" href="/help-${this.ticket.userid}"` +
-			` ${this.getPreview()}>Help ${creator}: ${this.ticket.type}</a> `
+			`<a class="button ${notifying}" href="/help-${this.userid}"` +
+			` ${this.getPreview()}>Help ${creator}: ${this.type}</a> `
 		);
 	}
 
 	getPreview() {
-		if (!this.ticket.active) return `title="The ticket creator has not spoken yet."`;
+		if (!this.active) return `title="The ticket creator has not spoken yet."`;
 		const hoverText = [];
 		for (let i = this.room.log.log.length - 1; i >= 0; i--) {
 			// Don't show anything after the first linebreak for multiline messages
@@ -242,8 +265,7 @@ export class HelpTicket extends Rooms.RoomGame {
 	}
 
 	close(result: boolean | 'ticketban' | 'deleted', staff?: User) {
-		this.ticket.open = false;
-		tickets[this.ticket.userid] = this.ticket;
+		this.open = false;
 		writeTickets();
 		this.room.modlog({action: 'TICKETCLOSE', isGlobal: true, loggedBy: staff?.id || 'unknown' as ID});
 		this.addText(staff ? `${staff.name} closed this ticket.` : `This ticket was closed.`, staff);
@@ -255,10 +277,10 @@ export class HelpTicket extends Rooms.RoomGame {
 			if (user) user.updateSearch();
 		}
 		if (!this.involvedStaff.size) {
-			if (staff?.isStaff && staff.id !== this.ticket.userid) {
+			if (staff?.isStaff && staff.id !== this.userid) {
 				this.involvedStaff.add(staff.id);
 			} else {
-				this.involvedStaff.add(toID(this.ticket.claimed));
+				this.involvedStaff.add(toID(this.claimed));
 			}
 		}
 		this.writeStats(result);
@@ -268,7 +290,7 @@ export class HelpTicket extends Rooms.RoomGame {
 		// Only run when a ticket is closed/banned/deleted
 		this.closeTime = Date.now();
 		if (this.lastUnclaimedStart) this.unclaimedTime += this.closeTime - this.lastUnclaimedStart;
-		if (!this.ticket.active) {
+		if (!this.active) {
 			this.resolution = "dead";
 		} else if (!this.firstClaimTime || this.emptyRoom) {
 			this.resolution = "unresolved";
@@ -276,7 +298,7 @@ export class HelpTicket extends Rooms.RoomGame {
 			this.resolution = "resolved";
 		}
 		if (typeof result === 'boolean') {
-			switch (this.ticket.type) {
+			switch (this.type) {
 			case 'Appeal':
 			case 'IP-Appeal':
 			case 'ISP-Appeal':
@@ -305,7 +327,7 @@ export class HelpTicket extends Rooms.RoomGame {
 		}
 		// Write to TSV
 		// ticketType\ttotalTime\ttimeToFirstClaim\tinactiveTime\tresolution\tresult\tstaff,userids,seperated,with,commas
-		const line = `${this.ticket.type}\t${(this.closeTime - this.createTime)}\t${firstClaimWait}\t${this.unclaimedTime}\t${this.resolution}\t${this.result}\t${involvedStaff}`;
+		const line = `${this.type}\t${(this.closeTime - this.createTime)}\t${firstClaimWait}\t${this.unclaimedTime}\t${this.resolution}\t${this.result}\t${involvedStaff}`;
 		writeStats(line);
 	}
 
@@ -313,7 +335,6 @@ export class HelpTicket extends Rooms.RoomGame {
 		this.close('deleted', staff);
 		this.room.modlog({action: 'TICKETDELETE', isGlobal: true, loggedBy: staff.id});
 		this.addText(`${staff.name} deleted this ticket.`, staff);
-		delete tickets[this.ticket.userid];
 		writeTickets();
 		notifyStaff();
 		this.room.destroy();
@@ -321,11 +342,10 @@ export class HelpTicket extends Rooms.RoomGame {
 
 	// Modified version of RoomGame.destory
 	destroy() {
-		if (tickets[this.ticket.userid] && this.ticket.open) {
+		if (this.open) {
 			// Ticket was not deleted - deleted tickets already have this done to them - and was not closed.
 			// Write stats and change flags as appropriate prior to deletion.
-			this.ticket.open = false;
-			tickets[this.ticket.userid] = this.ticket;
+			this.open = false;
 			notifyStaff();
 			writeTickets();
 			this.writeStats(false);
@@ -373,6 +393,42 @@ export class HelpTicket extends Rooms.RoomGame {
 		}
 		return false;
 	}
+}
+
+try {
+	const ticketData = JSON.parse(FS(TICKET_FILE).readSync());
+	for (const t in ticketData) {
+		const ticket = ticketData[t];
+		if (ticket.banned) {
+			if (ticket.expires && ticket.expires <= Date.now()) continue;
+			Punishments.roomPunish(`staff`, ticket.userid, ['TICKETBAN', ticket.userid, ticket.expires, ticket.reason]);
+			delete ticketData[t]; // delete the old format
+		} else {
+			if (ticket.created + TICKET_CACHE_TIME <= Date.now()) {
+				// Tickets that have been open for 24+ hours will be automatically closed.
+				const ticketRoom = Rooms.get(`help-${ticket.userid}`) as ChatRoom | null;
+				if (ticketRoom) {
+					const ticketGame = ticketRoom.game as HelpTicket;
+					ticketGame.writeStats(false);
+					ticketRoom.expire();
+				}
+				continue;
+			}
+			// Close open tickets after a restart
+			if (!Chat.oldPlugins.helptickets) continue;
+
+			// recreate tickets
+			for (const room of Rooms.rooms.values()) {
+				if (!room.settings.isHelp || !room.game) continue;
+				const game = room.getGame(HelpTicket)!;
+				if (game) {
+					room.game = new HelpTicket(room as ChatRoom, ticketData[game.userid]);
+				}
+			}
+		}
+	}
+} catch (e) {
+	if (e.code !== 'ENOENT') throw e;
 }
 
 const NOTIFY_ALL_TIMEOUT = 5 * 60 * 1000;
@@ -424,6 +480,7 @@ export function notifyStaff() {
 	const room = Rooms.get('staff');
 	if (!room) return;
 	let buf = ``;
+	const tickets = getTickets();
 	const keys = Object.keys(tickets).sort((aKey, bKey) => {
 		const a = tickets[aKey];
 		const b = tickets[bKey];
@@ -495,19 +552,13 @@ export function notifyStaff() {
 }
 
 function checkIp(ip: string) {
+	const tickets = getTickets();
 	for (const t in tickets) {
 		if (tickets[t].ip === ip && tickets[t].open && !Punishments.sharedIps.has(ip)) {
 			return tickets[t];
 		}
 	}
 	return false;
-}
-
-// Prevent a desynchronization issue when hotpatching
-for (const room of Rooms.rooms.values()) {
-	if (!room.settings.isHelp || !room.game) continue;
-	const game = room.getGame(HelpTicket)!;
-	if (game.ticket) game.ticket = tickets[game.ticket.userid];
 }
 
 const ticketTitles: {[k: string]: string} = Object.assign(Object.create(null), {
@@ -570,21 +621,18 @@ export const pages: PageTable = {
 
 			const banMsg = HelpTicket.checkBanned(user);
 			if (banMsg) return connection.popup(banMsg);
-			let ticket = tickets[user.id];
+			let helpRoom = Rooms.get(`help-${user.id}`);
+			let ticket = helpRoom?.getGame(HelpTicket)?.toJSON();
 			const ipTicket = checkIp(user.latestIp);
 			if (ticket?.open || ipTicket) {
-				if (!ticket && ipTicket) ticket = ipTicket;
-				const helpRoom = Rooms.get(`help-${ticket.userid}`);
-				if (!helpRoom) {
-					// Should never happen
-					tickets[ticket.userid].open = false;
-					writeTickets();
-				} else {
-					if (!helpRoom.auth.has(user.id)) helpRoom.auth.set(user.id, '+');
-					connection.popup(this.tr`You already have a Help ticket.`);
-					user.joinRoom(`help-${ticket.userid}` as RoomID);
-					return this.close();
+				if (!ticket && ipTicket) {
+					ticket = ipTicket;
+					helpRoom = Rooms.get(`help-${toID(ticket.creator)}`);
 				}
+				if (!helpRoom?.auth.has(user.id)) helpRoom!.auth.set(user.id, '+');
+				connection.popup(this.tr`You already have a Help ticket.`);
+				user.joinRoom(`help-${ticket?.userid || user.id}` as RoomID);
+				return this.close();
 			}
 
 			const isStaff = user.can('lock');
@@ -758,6 +806,7 @@ export const pages: PageTable = {
 			buf += `<table style="margin-left: auto; margin-right: auto"><tbody><tr><th colspan="5"><h2 style="margin: 5px auto">${this.tr`Help tickets`}</h1></th></tr>`;
 			buf += `<tr><th>${this.tr`Status`}</th><th>${this.tr`Creator`}</th><th>${this.tr`Ticket Type`}</th><th>${this.tr`Claimed by`}</th><th>${this.tr`Action`}</th></tr>`;
 
+			const tickets = getTickets();
 			const keys = Object.keys(tickets).sort((aKey, bKey) => {
 				const a = tickets[aKey];
 				const b = tickets[bKey];
@@ -1058,20 +1107,17 @@ export const commands: ChatCommands = {
 			if (!user.named) return this.popupReply(this.tr`You need to choose a username before doing this.`);
 			const banMsg = HelpTicket.checkBanned(user);
 			if (banMsg) return this.popupReply(banMsg);
-			let ticket = tickets[user.id];
+			let helpRoom = Rooms.get(`help-${user.id}`) as ChatRoom | null;
+			let ticket = (helpRoom?.game as HelpTicket | null)?.toJSON();
 			const ipTicket = checkIp(user.latestIp);
 			if (ticket?.open || ipTicket) {
-				if (!ticket && ipTicket) ticket = ipTicket;
-				const helpRoom = Rooms.get(`help-${ticket.userid}`);
-				if (!helpRoom) {
-					// Should never happen
-					tickets[ticket.userid].open = false;
-					writeTickets();
-				} else {
-					if (!helpRoom.auth.has(user.id)) helpRoom.auth.set(user.id, '+');
-					this.parse(`/join help-${ticket.userid}`);
-					return this.popupReply(this.tr`You already have an open ticket; please wait for global staff to respond.`);
+				if (!ticket && ipTicket) {
+					ticket = ipTicket;
+					helpRoom = Rooms.get(`help-${toID(ticket.creator)}`) as ChatRoom | null;
 				}
+				if (!helpRoom!.auth.has(user.id)) helpRoom!.auth.set(user.id, '+');
+				this.parse(`/join help-${ticket?.userid || user.id}`);
+				return this.popupReply(this.tr`You already have an open ticket; please wait for global staff to respond.`);
 			}
 			if (Monitor.countTickets(user.latestIp)) {
 				const maxTickets = Punishments.sharedIps.has(user.latestIp) ? `50` : `5`;
@@ -1103,6 +1149,7 @@ export const commands: ChatCommands = {
 				created: Date.now(),
 				claimed: null,
 				ip: user.latestIp,
+				result: null,
 			};
 			let closeButtons = ``;
 			switch (ticket.type) {
@@ -1169,7 +1216,6 @@ export const commands: ChatCommands = {
 					}
 				}
 			}
-			let helpRoom = Rooms.get(`help-${user.id}`) as ChatRoom | null;
 			if (!helpRoom) {
 				helpRoom = Rooms.createChatRoom(`help-${user.id}` as RoomID, `[H] ${user.name}`, {
 					isPersonal: true,
@@ -1204,7 +1250,6 @@ export const commands: ChatCommands = {
 				helpRoom.add(pmRequestButton);
 				helpRoom.update();
 			}
-			tickets[user.id] = ticket;
 			writeTickets();
 			notifyStaff();
 			connection.send(`>view-help-request\n|deinit`);
@@ -1225,24 +1270,18 @@ export const commands: ChatCommands = {
 		close(target, room, user) {
 			if (!target) return this.parse(`/help helpticket close`);
 			let result = !(this.splitTarget(target) === 'false');
-			const ticket = tickets[toID(this.inputUsername)];
-			if (!ticket || !ticket.open || (ticket.userid !== user.id && !user.can('lock'))) {
-				return this.errorReply(this.tr`${this.inputUsername} does not have an open ticket.`);
-			}
-			const helpRoom = Rooms.get(`help-${ticket.userid}`) as ChatRoom | null;
+
+			const helpRoom = Rooms.get(`help-${toID(target)}`) as ChatRoom | null;
 			if (helpRoom) {
 				const ticketGame = helpRoom.getGame(HelpTicket)!;
-				if (ticket.userid === user.id && !user.isStaff) {
+				if (ticketGame.userid === user.id && !user.isStaff) {
 					result = !!(ticketGame.firstClaimTime);
 				}
 				ticketGame.close(result, user);
 			} else {
-				ticket.open = false;
-				notifyStaff();
-				writeTickets();
+				return this.errorReply(this.tr`${this.inputUsername} does not have an open ticket.`);
 			}
-			ticket.claimed = user.name;
-			this.sendReply(`You closed ${ticket.creator}'s ticket.`);
+			this.sendReply(`You closed ${this.inputUsername}'s ticket.`);
 		},
 		closehelp: [`/helpticket close [user] - Closes an open ticket. Requires: % @ &`],
 
@@ -1299,8 +1338,6 @@ export const commands: ChatCommands = {
 			this.globalModlog(`TICKETBAN`, targetUser || userid, target);
 			for (const userObj of affected) {
 				const userObjID = (typeof userObj !== 'string' ? userObj.getLastId() : toID(userObj));
-				const targetTicket = tickets[userObjID];
-				if (targetTicket?.open) targetTicket.open = false;
 				const helpRoom = Rooms.get(`help-${userObjID}`);
 				if (helpRoom) {
 					const ticketGame = helpRoom.getGame(HelpTicket)!;
@@ -1358,16 +1395,14 @@ export const commands: ChatCommands = {
 			// This is a utility only to be used if something goes wrong
 			this.checkCan('makeroom');
 			if (!target) return this.parse(`/help helpticket delete`);
-			const ticket = tickets[toID(target)];
-			if (!ticket) return this.errorReply(this.tr`${target} does not have a ticket.`);
-			const targetRoom = Rooms.get(`help-${ticket.userid}`);
+			const targetRoom = Rooms.get(`help-${toID(target)}`);
 			if (targetRoom) {
 				targetRoom.getGame(HelpTicket)!.deleteTicket(user);
 			} else {
-				delete tickets[ticket.userid];
-				writeTickets();
-				notifyStaff();
+				return this.errorReply(`${target} does not have a ticket.`);
 			}
+			writeTickets();
+			notifyStaff();
 			this.sendReply(this.tr`You deleted ${target}'s ticket.`);
 		},
 		deletehelp: [`/helpticket delete [user] - Deletes a user's ticket. Requires: &`],
