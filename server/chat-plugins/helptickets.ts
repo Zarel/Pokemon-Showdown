@@ -1281,11 +1281,12 @@ export const commands: ChatCommands = {
 				}
 			}
 
+			const {punishment: outputPunishment, affected} = HelpTicket.ban(userid, target);
+
 			if (targetUser) {
-				targetUser.popup(`|modal|${user.name} has banned you from creating help tickets.${(target ? `\n\nReason: ${target}` : ``)}\n\nYour ban will expire in a few days.`);
+				targetUser.popup(`|modal|${user.name} has banned you from creating help tickets.${(target ? `\n\nReason: ${target}` : ``)}\n\nYour ban will expire ${Punishments.getPunishmentExpirationDescription(outputPunishment)}.`);
 			}
 
-			const affected = HelpTicket.ban(userid, target);
 			this.addModAction(`${username} was ticket banned by ${user.name}.${target ? ` (${target})` : ``}`);
 			const acAccount = (targetUser && targetUser.autoconfirmed !== userid && targetUser.autoconfirmed);
 			let displayMessage = '';

@@ -469,7 +469,7 @@ export const Punishments = new class {
 		}
 
 		if (!bypassPunishmentfilter) Chat.punishmentfilter(user, punishment);
-		return affected;
+		return {punishment, affected};
 	}
 
 	async punishInner(user: User, punishment: Punishment, userids: Set<ID>, ips: Set<string>, mobileIps: Set<string>) {
@@ -546,7 +546,7 @@ export const Punishments = new class {
 		}, id, PUNISHMENT_FILE);
 
 		Chat.punishmentfilter(userid, punishment);
-		return affected;
+		return {punishment, affected};
 	}
 
 	unpunish(id: string, punishType: string) {
@@ -610,7 +610,7 @@ export const Punishments = new class {
 			}
 		}
 
-		return affected;
+		return {punishment, affected};
 	}
 
 	roomPunishInner(roomid: RoomID, user: User, punishment: Punishment, userids: Set<string>, ips: Set<string>) {
@@ -669,7 +669,7 @@ export const Punishments = new class {
 				void Punishments.monitorRoomPunishments(userid);
 			}
 		}
-		return affected;
+		return {punishment, affected};
 	}
 
 	/**
@@ -720,13 +720,13 @@ export const Punishments = new class {
 		if (!expireTime) expireTime = Date.now() + GLOBALBAN_DURATION;
 		const punishment = ['BAN', id, expireTime, ...reason] as Punishment;
 
-		const affected = await Punishments.punish(user, punishment, ignoreAlts);
+		const {punishment: outputPunishment, affected} = await Punishments.punish(user, punishment, ignoreAlts);
 		for (const curUser of affected) {
 			curUser.locked = punishment[1];
 			curUser.disconnectAll();
 		}
 
-		return affected;
+		return {punishment: outputPunishment, affected};
 	}
 	unban(name: string) {
 		return Punishments.unpunish(name, 'BAN');
@@ -742,14 +742,17 @@ export const Punishments = new class {
 		if (!expireTime) expireTime = Date.now() + LOCK_DURATION;
 		const punishment = ['LOCK', id, expireTime, reason] as Punishment;
 
-		const affected = await Punishments.punish(user, punishment, ignoreAlts, bypassPunishmentfilter);
+		const {
+			punishment: outputPunishment,
+			affected,
+		} = await Punishments.punish(user, punishment, ignoreAlts, bypassPunishmentfilter);
 
 		for (const curUser of affected) {
 			curUser.locked = punishment[1];
 			curUser.updateIdentity();
 		}
 
-		return affected;
+		return {punishment: outputPunishment, affected};
 	}
 	async autolock(
 		user: User | ID,
@@ -772,11 +775,19 @@ export const Punishments = new class {
 		const userid = toID(user);
 		if (Users.get(user)?.locked) return false;
 		const name = typeof user === 'string' ? user : (user as User).name;
+		let outputPunishment;
+		let affected;
 		if (namelock) {
 			punishment = `NAME${punishment}`;
-			await Punishments.namelock(user, expires, toID(namelock), false, `Autonamelock: ${name}: ${reason}`);
+			({
+				punishment: outputPunishment,
+				affected,
+			} = await Punishments.namelock(user, expires, toID(namelock), false, `Autonamelock: ${name}: ${reason}`));
 		} else {
-			await Punishments.lock(user, expires, userid, false, `Autolock: ${name}: ${reason}`);
+			({
+				punishment: outputPunishment,
+				affected,
+			} = await Punishments.lock(user, expires, userid, false, `Autolock: ${name}: ${reason}`));
 		}
 		Monitor.log(`[${source}] ${punishment}ED: ${message}`);
 		const roomauth = Rooms.global.destroyPersonalRooms(userid);
@@ -800,6 +811,8 @@ export const Punishments = new class {
 		if (roomObject?.battle && userObject && userObject.connections[0]) {
 			Chat.parse('/savereplay forpunishment', roomObject, userObject, userObject.connections[0]);
 		}
+
+		return {punishment: outputPunishment, affected};
 	}
 	unlock(name: string) {
 		const user = Users.get(name);
@@ -837,7 +850,7 @@ export const Punishments = new class {
 		if (!expireTime) expireTime = Date.now() + LOCK_DURATION;
 		const punishment = ['NAMELOCK', id, expireTime, ...reason] as Punishment;
 
-		const affected = await Punishments.punish(user, punishment, ignoreAlts);
+		const {punishment: outputPunishment, affected} = await Punishments.punish(user, punishment, ignoreAlts);
 		for (const curUser of affected) {
 			curUser.locked = punishment[1];
 			curUser.namelocked = punishment[1];
@@ -845,7 +858,7 @@ export const Punishments = new class {
 			curUser.updateIdentity();
 		}
 
-		return affected;
+		return {punishment: outputPunishment, affected};
 	}
 	unnamelock(name: string) {
 		const user = Users.get(name);
@@ -938,7 +951,7 @@ export const Punishments = new class {
 		if (!expireTime) expireTime = Date.now() + ROOMBAN_DURATION;
 		const punishment = ['ROOMBAN', id, expireTime, ...reason] as Punishment;
 
-		const affected = Punishments.roomPunish(room, user, punishment);
+		const {punishment: outputPunishment, affected} = Punishments.roomPunish(room, user, punishment);
 		for (const curUser of affected) {
 			if (room.game && room.game.removeBannedUser) {
 				room.game.removeBannedUser(curUser);
@@ -957,14 +970,14 @@ export const Punishments = new class {
 			}
 		}
 
-		return affected;
+		return {punishment: outputPunishment, affected};
 	}
 
 	roomBlacklist(room: Room, user: User | ID, expireTime: number | null, id: ID | null, ...reason: string[]) {
 		if (!expireTime) expireTime = Date.now() + BLACKLIST_DURATION;
 		const punishment = ['BLACKLIST', id, expireTime, ...reason] as Punishment;
 
-		const affected = Punishments.roomPunish(room, user, punishment);
+		const {punishment: outputPunishment, affected} = Punishments.roomPunish(room, user, punishment);
 
 		for (const curUser of affected) {
 			if (room.game && room.game.removeBannedUser) {
@@ -984,7 +997,7 @@ export const Punishments = new class {
 			}
 		}
 
-		return affected;
+		return {punishment: outputPunishment, affected};
 	}
 
 	roomUnban(room: Room, userid: string) {
@@ -1186,12 +1199,13 @@ export const Punishments = new class {
 			if (battleban[1] !== user.id && Punishments.sharedIps.has(user.latestIp) && user.autoconfirmed) {
 				Punishments.roomUnpunish("battle", userid, 'BATTLEBAN');
 			} else {
+				const battlebanExpirationDescription = this.getPunishmentExpirationDescription(battleban);
 				Punishments.roomPunish("battle", user, battleban);
 				user.cancelReady();
 				if (!punishment) {
 					const appealLink = ticket || (Config.appealurl ? `appeal at: ${Config.appealurl}` : ``);
 					// Prioritize popups for other global punishments
-					user.send(`|popup||html|You are banned from battling${battleban[1] !== userid ? ` because you have the same IP as banned user: ${battleban[1]}` : ''}. Your battle ban will expire in a few days.${battleban[3] ? Utils.html `\n\nReason: ${battleban[3]}` : ``}${appealLink ? `\n\nOr you can ${appealLink}.` : ``}`);
+					user.send(`|popup||html|You are banned from battling${battleban[1] !== userid ? ` because you have the same IP as banned user: ${battleban[1]}` : ''}. Your battle ban will expire ${battlebanExpirationDescription}.${battleban[3] ? Utils.html `\n\nReason: ${battleban[3]}` : ``}${appealLink ? `\n\nOr you can ${appealLink}.` : ``}`);
 					user.notified.punishment = true;
 					return;
 				}
@@ -1202,6 +1216,7 @@ export const Punishments = new class {
 		const id = punishment[0];
 		const punishUserid = punishment[1];
 		const reason = punishment[3] ? Utils.html`\n\nReason: ${punishment[3]}` : '';
+		const punishmentExpirationDescription = this.getPunishmentExpirationDescription(punishment);
 		let appeal = ``;
 		if (user.permalocked && Config.appealurl) {
 			appeal += `\n\nPermanent punishments can be appealed: <a href="${Config.appealurl}">${Config.appealurl}</a>`;
@@ -1224,7 +1239,7 @@ export const Punishments = new class {
 		}
 		if (registered && id === 'BAN') {
 			user.popup(
-				`Your username (${user.name}) is banned${bannedUnder}. Your ban will expire in a few days.${reason}` +
+				`Your username (${user.name}) is banned${bannedUnder}. Your ban will expire ${punishmentExpirationDescription}.${reason}` +
 				`${Config.appealurl ? `||||Or you can appeal at: ${Config.appealurl}` : ``}`
 			);
 			user.notified.punishment = true;
@@ -1233,7 +1248,7 @@ export const Punishments = new class {
 			return;
 		}
 		if (id === 'NAMELOCK' || user.namelocked) {
-			user.send(`|popup||html|You are namelocked and can't have a username${bannedUnder}. Your namelock will expire in a few days.${reason}${appeal}`);
+			user.send(`|popup||html|You are namelocked and can't have a username${bannedUnder}. Your namelock will expire ${punishmentExpirationDescription}.${reason}${appeal}`);
 			user.locked = punishUserid;
 			user.namelocked = punishUserid;
 			user.resetName();
@@ -1244,7 +1259,7 @@ export const Punishments = new class {
 			} else if (user.latestHostType === 'proxy' && user.locked !== user.id) {
 				user.send(`|popup||html|You are locked${bannedUnder} on the IP (${user.latestIp}), which is a proxy. We automatically lock these connections since they are used to spam, hack, or otherwise attack our server. Disable any proxies you are using to connect to PS.\n\n<a href="view-help-request--appeal"><button class="button">Help me with a lock from a proxy</button></a>`);
 			} else if (!user.notified.lock) {
-				user.send(`|popup||html|You are locked${bannedUnder}. ${user.permalocked ? `This lock is permanent.` : `Your lock will expire in a few days.`}${reason}${appeal}`);
+				user.send(`|popup||html|You are locked${bannedUnder}. ${user.permalocked ? `This lock is permanent.` : `Your lock will expire ${punishmentExpirationDescription}.`}${reason}${appeal}`);
 			}
 			user.notified.lock = true;
 			user.locked = punishUserid;
@@ -1304,13 +1319,17 @@ export const Punishments = new class {
 
 		let banned: false | string = false;
 		const punishment = Punishments.ipSearch(ip);
-		if (punishment && punishment[0] === 'BAN') {
-			banned = punishment[1];
+		let punishmentExpirationDescription = 'in a few days';
+		if (punishment) {
+			punishmentExpirationDescription = this.getPunishmentExpirationDescription(punishment);
+			if (punishment[0] === 'BAN') {
+				banned = punishment[1];
+			}
 		}
 		if (!banned) return false;
 
 		const appeal = (Config.appealurl ? `||||Or you can appeal at: ${Config.appealurl}` : ``);
-		connection.send(`|popup||modal|You are banned because you have the same IP (${ip}) as banned user '${banned}'. Your ban will expire in a few days.${appeal}`);
+		connection.send(`|popup||modal|You are banned because you have the same IP (${ip}) as banned user '${banned}'. Your ban will expire ${punishmentExpirationDescription}.${appeal}`);
 		Monitor.notice(`CONNECT BLOCKED - IP BANNED: ${ip} (${banned})`);
 
 		return banned;
@@ -1358,24 +1377,24 @@ export const Punishments = new class {
 	 * @return Descriptive text for the remaining time until the punishment expires, if any.
 	 */
 	checkLockExpiration(userid: string | null) {
-		if (!userid) return ``;
+		if (!userid) return '';
+
+		const user = Users.get(userid);
+		if (user?.permalocked) return ' (never expires; you are permalocked)';
+
 		const punishment = Punishments.userids.get(userid);
 
 		if (punishment) {
-			const user = Users.get(userid);
-			if (user?.permalocked) return ` (never expires; you are permalocked)`;
-			const expiresIn = new Date(punishment[2]).getTime() - Date.now();
-			const expiresDays = Math.round(expiresIn / 1000 / 60 / 60 / 24);
-			let expiresText = '';
-			if (expiresDays >= 1) {
-				expiresText = `in around ${Chat.count(expiresDays, "days")}`;
-			} else {
-				expiresText = `soon`;
-			}
-			if (expiresIn > 1) return ` (expires ${expiresText})`;
+			return ` (expires ${this.getPunishmentExpirationDescription(punishment)})`;
 		}
 
-		return ``;
+		return '';
+	}
+
+	getPunishmentExpirationDescription(punishment: Punishment) {
+		const expiresIn = new Date(punishment[2]).getTime() - Date.now();
+
+		return `in ${Chat.toDurationString(expiresIn)}`;
 	}
 
 	isRoomBanned(user: User, roomid: RoomID): Punishment | undefined {
@@ -1576,12 +1595,14 @@ export const Punishments = new class {
 				const message = `${(user as User).name || userid} was locked for having punishments in ${punishments.length} rooms: ${punishmentText}`;
 				const isWeek = await Rooms.Modlog.getGlobalPunishments(userid, AUTOWEEKLOCK_DAYS_TO_SEARCH) >= AUTOWEEKLOCK_THRESHOLD;
 
-				void Punishments.autolock(user, 'staff', 'PunishmentMonitor', reason, message, isWeek);
+				const autolockResult = await Punishments.autolock(user, 'staff', 'PunishmentMonitor', reason, message, isWeek);
+				const autolockExpirationDescription = autolockResult ?
+					this.getPunishmentExpirationDescription(autolockResult.punishment) : (isWeek ? 'in a week' : 'in a few days');
 				if (typeof user !== 'string') {
 					(user as User).popup(
 						`|modal|You've been locked for breaking the rules in multiple chatrooms.\n\n` +
 						`If you feel that your lock was unjustified, you can still PM staff members (%, @, &) to discuss it${Config.appealurl ? " or you can appeal:\n" + Config.appealurl : "."}\n\n` +
-						`Your lock will expire in a few days.`
+						`Your lock will expire ${autolockExpirationDescription}.`
 					);
 				}
 			} else {

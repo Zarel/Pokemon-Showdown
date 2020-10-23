@@ -692,7 +692,7 @@ export const commands: ChatCommands = {
 		this.addModAction(`${name} was banned ${week ? ' for a week' : ''} from ${room.title} by ${user.name}.${reason}`);
 
 		const time = week ? Date.now() + 7 * 24 * 60 * 60 * 1000 : null;
-		const affected = Punishments.roomBan(room, targetUser, time, null, target);
+		const {affected} = Punishments.roomBan(room, targetUser, time, null, target);
 
 		if (!room.settings.isPrivate && room.persist) {
 			const acAccount = (targetUser.autoconfirmed !== userid && targetUser.autoconfirmed);
@@ -805,13 +805,14 @@ export const commands: ChatCommands = {
 
 		// Use default time for locks.
 		const duration = week ? Date.now() + 7 * 24 * 60 * 60 * 1000 : (month ? Date.now() + 30 * 24 * 60 * 60 * 1000 : null);
+		let punishment;
 		let affected = [];
 
 		if (targetUser) {
 			const ignoreAlts = Punishments.sharedIps.has(targetUser.latestIp);
-			affected = await Punishments.lock(targetUser, duration, null, ignoreAlts, userReason);
+			({punishment, affected} = await Punishments.lock(targetUser, duration, null, ignoreAlts, userReason));
 		} else {
-			affected = await Punishments.lock(userid, duration, null, false, userReason);
+			({punishment, affected} = await Punishments.lock(userid, duration, null, false, userReason));
 		}
 
 		const globalReason = (target ? `${userReason} ${proof}` : '');
@@ -845,7 +846,7 @@ export const commands: ChatCommands = {
 			}
 
 			if (appeal) message += `\n\nIf you feel that your lock was unjustified, you can ${appeal}.`;
-			message += `\n\nYour lock will expire in a few days.`;
+			message += `\n\nYour lock will expire ${Punishments.getPunishmentExpirationDescription(punishment)}.`;
 			targetUser.send(message);
 
 			const roomauth = Rooms.global.destroyPersonalRooms(userid);
@@ -999,11 +1000,17 @@ export const commands: ChatCommands = {
 			userReason = target.substr(0, proofIndex).trim();
 		}
 
-		targetUser.popup(`|modal|${user.name} has globally banned you.${(userReason ? `\n\nReason: ${userReason}` : ``)} ${(Config.appealurl ? `\n\nIf you feel that your ban was unjustified, you can appeal:\n${Config.appealurl}` : ``)}\n\nYour ban will expire in a few days.`);
+		const {punishment, affected} = await Punishments.ban(targetUser, null, null, false, userReason);
+
+		targetUser.popup(
+			`|modal|${user.name} has globally banned you.` +
+			(userReason ? `\n\nReason: ${userReason}` : '') +
+			(Config.appealurl ? `\n\nIf you feel that your ban was unjustified, you can appeal:\n${Config.appealurl}` : ``) +
+			`\n\nYour ban will expire ${Punishments.getPunishmentExpirationDescription(punishment)}.`
+		);
 
 		this.addGlobalModAction(`${name} was globally banned by ${user.name}.${(userReason ? ` (${userReason})` : ``)}`);
 
-		const affected = await Punishments.ban(targetUser, null, null, false, userReason);
 		const acAccount = (targetUser.autoconfirmed !== userid && targetUser.autoconfirmed);
 		let displayMessage = '';
 		if (affected.length > 1) {
@@ -1744,7 +1751,7 @@ export const commands: ChatCommands = {
 
 		this.privateModAction(`${name} was blacklisted from ${room.title} by ${user.name}. ${target ? ` (${target})` : ''}`);
 
-		const affected = Punishments.roomBlacklist(room, targetUser, null, null, target);
+		const {affected} = Punishments.roomBlacklist(room, targetUser, null, null, target);
 
 		if (!room.settings.isPrivate && room.persist) {
 			const acAccount = (targetUser.autoconfirmed !== userid && targetUser.autoconfirmed);
