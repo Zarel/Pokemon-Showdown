@@ -41,6 +41,7 @@ interface Recommendation {
 interface Recommendations {
 	suggested: Recommendation[];
 	saved: Recommendation[];
+	intervalTime?: number;
 }
 
 const lastfm: {[userid: string]: string} = JSON.parse(FS(LASTFM_DB).readIfExistsSync() || "{}");
@@ -212,6 +213,11 @@ export class LastFMInterface {
 }
 
 class RecommendationsInterface {
+	interval!: NodeJS.Timer;
+	intervalTime = recommendations.intervalTime ? recommendations.intervalTime : 60;
+	constructor() {
+		this.runInterval(`${this.intervalTime}`);
+	}
 	getRandomRecommendation() {
 		const recs = recommendations.saved;
 		return recs[Math.floor(Math.random() * recs.length)];
@@ -221,6 +227,28 @@ class RecommendationsInterface {
 		if (room?.roomid !== 'thestudio') {
 			throw new Chat.ErrorMessage(`This command can only be used in The Studio.`);
 		}
+	}
+
+	runInterval(time: string) {
+		let interval = Number(time);
+		if (isNaN(interval)) throw new Chat.ErrorMessage(`Invalid interval time.`);
+		if (interval >= Chat.MAX_TIMEOUT_DURATION) {
+			throw new Chat.ErrorMessage('That interval is too long. Please choose a lower number.');
+		}
+		this.intervalTime = interval;
+		recommendations.intervalTime = interval;
+		interval = interval * 60 * 1000;
+		saveRecommendations();
+		if (this.interval) clearInterval(this.interval);
+		this.interval = setInterval(() => {
+			void (async () => {
+				const room = Rooms.get('thestudio');
+				if (!room) return; // do nothing if the room doesn't exist anymore
+				const res = await this.render(this.getRandomRecommendation());
+				room.add(`|html|${res}`).update();
+			})();
+		}, interval);
+		return this.interval;
 	}
 
 	add(
@@ -416,6 +444,10 @@ class RecommendationsInterface {
 
 export const LastFM = new LastFMInterface();
 export const Recs = new RecommendationsInterface();
+
+export function destroy() {
+	if (Recs.interval) clearInterval(Recs.interval);
+}
 
 export const commands: ChatCommands = {
 	registerlastfm(target, room, user) {
@@ -633,6 +665,26 @@ export const commands: ChatCommands = {
 	},
 	viewsuggestedrecommendationshelp: [
 		`/viewsuggestedrecommendations OR /viewsuggestions - View all suggested recommended songs. Requires: % @ * # &`,
+	],
+	repeatrec: 'repeatrecommendations',
+	repeatrecommendations(target, room, user) {
+		room = this.requireRoom('thestudio' as RoomID);
+		if (!target) {
+			return this.sendReply(
+				`The Studio recommendation interval is currently set to: ` +
+				`${Recs.intervalTime ? `${Recs.intervalTime} minutes` : 'OFF'}`
+			);
+		}
+		if (isNaN(parseInt(target))) {
+			return this.parse(`/help repeatrecommendations`);
+		}
+		this.checkCan('ban', null, room);
+		Recs.runInterval(target);
+		this.privateModAction(`${user.name} set the recommendation interval to ${Recs.intervalTime} minutes.`);
+		this.modlog(`RECOMMENDATION INTERVAL`, null, `${Recs.intervalTime} minutes`);
+	},
+	repeatrecommendationshelp: [
+		`/repeatrecommendations [minutes] - Set a timer to post a random interval in The Studio every [minutes] minutes. Requires: @ & #`,
 	],
 };
 
