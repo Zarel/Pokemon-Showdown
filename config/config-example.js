@@ -379,6 +379,11 @@ exports.logchallenges = false;
 exports.loguserstats = 1000 * 60 * 10; // 10 minutes
 
 /**
+ * persistbattles - Whether or not to persist battles through server restarts.
+*/
+exports.persistbattles = true;
+
+/**
  * validatorprocesses - the number of processes to use for validating teams
  * simulatorprocesses - the number of processes to use for handling battles
  * You should leave both of these at 1 unless your server has a very large

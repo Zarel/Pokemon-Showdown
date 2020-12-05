@@ -403,6 +403,7 @@ export const commands: ChatCommands = {
 				}
 			})
 		);
+		user.rejoinBattle();
 
 		await Promise.all(promises);
 		connection.autojoins = autojoins.join(',');

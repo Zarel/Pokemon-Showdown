@@ -207,3 +207,6 @@ if (Config.ofemain) {
 		addTimestamp: true,
 	});
 }
+
+// Everything else needed is initialized, load battle state
+Rooms.global.loadBattleState();

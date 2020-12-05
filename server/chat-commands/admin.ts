@@ -791,17 +791,18 @@ export const commands: ChatCommands = {
 
 		const logRoom = Rooms.get('staff') || Rooms.lobby || room;
 
-		if (!logRoom?.log.roomlogStream) return process.exit();
+		if (!logRoom?.log.roomlogStream) return Rooms.global.kill();
 
 		logRoom.roomlog(`${user.name} used /kill`);
 
-		void logRoom.log.roomlogStream.writeEnd().then(() => {
-			process.exit();
-		});
+		void Promise.all([
+			logRoom.log.roomlogStream.writeEnd(),
+			Rooms.global.kill(),
+		]);
 
 		// In the case the above never terminates
 		setTimeout(() => {
-			process.exit();
+			void Rooms.global.kill();
 		}, 10000);
 	},
 	killhelp: [`/kill - kills the server. Can't be done unless the server is in lockdown state. Requires: &`],

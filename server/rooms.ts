@@ -1491,15 +1491,51 @@ export class GlobalRoomState {
 			// kill server in 10 seconds if it's still set to
 			setTimeout(() => {
 				if (Config.autolockdown && Rooms.global.lockdown === true) {
-					// finally kill the server
-					process.exit();
+					// finally save state / kill the server
+					void this.kill();
 				} else {
 					this.notifyRooms(
 						notifyPlaces,
-						`|html|<div class="broadcsat-red"><b>Automatic server lockdown kill canceled.</b><br /><br />In the last final seconds, the automatic lockdown was manually disabled.</div>`
+						`|html|<div class="broadcast-red"><b>Automatic server lockdown kill canceled.</b><br /><br />In the last final seconds, the automatic lockdown was manually disabled.</div>`
 					);
 				}
 			}, 10 * 1000);
+		}
+	}
+	async kill() {
+		if (Config.persistbattles) await this.writeBattleState();
+		return process.exit();
+	}
+	async writeBattleState() {
+		const buffer: AnyObject = {};
+		const promises = [];
+		for (const [id, room] of Rooms.rooms) {
+			if (!room.battle) continue;
+			const formatid = room.battle.format;
+			if (!buffer[formatid]) buffer[formatid] = {};
+			const promise = room.battle.getLog().then((log) => {
+				if (!log) throw new Error(`Invalid battle log received while writing battle state.`);
+				buffer[formatid][id] = {
+					inputLog: log.join('\n'),
+					title: room.title,
+					roomid: room.roomid,
+				};
+			});
+			promises.push(promise);
+		}
+		await Promise.all(promises);
+		return FS(`logs/battles.json`).writeUpdate(() => JSON.stringify(buffer));
+	}
+	loadBattleState() {
+		if (!Config.persistbattles) return;
+		const battleData = JSON.parse(FS(`logs/battles.json`).readIfExistsSync() || "{}");
+
+		FS(`logs/battles.json`).writeUpdate(() => JSON.stringify({}));
+		for (const formatid in battleData) {
+			for (const battle in battleData[formatid]) {
+				const entry = battleData[formatid][battle];
+				Rooms.createBattle(formatid, entry);
+			}
 		}
 	}
 	notifyRooms(rooms: RoomID[], message: string) {
@@ -1729,6 +1765,20 @@ export class GameRoom extends BasicRoom {
 			silent: options === 'forpunishment' || options === 'silent',
 		}));
 	}
+	parseInputLog(): AnyObject {
+		if (!this.battle) return {};
+		if (!this.battle.inputLog) return {};
+		const log = this.battle.inputLog;
+		const battle = this.battle;
+		const playerCount = battle.gameType && ['multi', 'free-for-all'].includes(battle.gameType) ? 4 : 2;
+		const players = log.filter(item => item.includes('>player'))
+			.slice(0, playerCount)
+			.map(item => toID(JSON.parse(item.slice(10)).name));
+		const formatidLine = log.filter(item => item.includes(`formatid":"`))[0];
+		const spaceIndex = formatidLine.indexOf(' ');
+		const formatid = JSON.parse(formatidLine.slice(spaceIndex)).formatid;
+		return {players, playerCount, formatid};
+	}
 
 	getReplayData() {
 		if (!this.roomid.endsWith('pw')) return {id: this.roomid.slice(7)};
@@ -1815,7 +1865,7 @@ export const Rooms = {
 			options.ratedMessage = p1Special;
 		}
 
-		const roomid = Rooms.global.prepBattleRoom(formatid);
+		const roomid = options.roomid ? options.roomid : Rooms.global.prepBattleRoom(formatid);
 		options.format = formatid;
 		// options.rated is a number representing the lowest player rating, for searching purposes
 		// options.rated < 0 or falsy means "unrated", and will be converted to 0 here
@@ -1828,6 +1878,8 @@ export const Rooms = {
 		let roomTitle;
 		if (gameType === 'multi') {
 			roomTitle = `Team ${p1name} vs. Team ${p2name}`;
+		} else if (options.title) {
+			roomTitle = options.title;
 		} else if (gameType === 'free-for-all') {
 			// p1 vs. p2 vs. p3 vs. p4 is too long of a title
 			roomTitle = `${p1name} and friends`;
@@ -1898,3 +1950,4 @@ export const Rooms = {
 	RoomBattleTimer,
 	PM: RoomBattlePM,
 };
+
