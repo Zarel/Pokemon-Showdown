@@ -20,21 +20,18 @@ export class RPSPlayer extends Rooms.RoomGamePlayer {
 }
 
 export class RPSGame extends Rooms.RoomGame {
+	readonly playerType = RPSPlayer;
 	room: Room;
 	currentRound: number;
-	playerTable: {[k: string]: RPSPlayer};
 	readonly checkChat = true;
 	roundTimer?: NodeJS.Timeout;
-	players: RPSPlayer[];
 	wins: ({name: string, choice: string} | null)[];
 	constructor(room: Room) {
 		super(room);
 		this.room = room;
 		this.currentRound = 0;
-		this.playerTable = {};
 		this.title = 'Rock Paper Scissors';
 		this.gameid = 'rockpaperscissors' as ID;
-		this.players = [];
 		this.wins = [];
 
 		this.room.update();
@@ -227,7 +224,8 @@ export class RPSGame extends Rooms.RoomGame {
 		for (const id in this.playerTable) {
 			this.playerTable[id].unlinkUser();
 		}
-		this.playerTable = {};
+		// @ts-ignore
+		this.playerTable = null;
 	}
 	choose(user: User, option: string) {
 		const player = this.getPlayer(user);

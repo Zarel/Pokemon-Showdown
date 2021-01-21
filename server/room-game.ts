@@ -34,7 +34,7 @@ export class RoomGamePlayer {
 	 * we explicitly don't hold a direct reference to the user
 	 */
 	id: ID;
-	constructor(user: User | string | null, game: RoomGame, num = 0) {
+	constructor(user: User | string | null, game: RoomGame, num = 0, ...rest: any[]) {
 		this.num = num;
 		if (!user) user = num ? `Player ${num}` : `Player`;
 		this.game = game;
@@ -72,6 +72,8 @@ export class RoomGamePlayer {
 	}
 }
 
+interface PlayerTable<T extends RoomGamePlayer> {[userid: string]: T}
+
 /**
  * globally Rooms.RoomGame
  */
@@ -86,13 +88,18 @@ export class RoomGame {
 	title: string;
 	allowRenames: boolean;
 	isSubGame: boolean;
+
+	/**
+	 * The class extending RoomGamePlayer that a RoomGame's players are represented by
+	 */
+	readonly playerType = RoomGamePlayer;
 	/**
 	 * userid:player table.
 	 *
 	 * Does not contain userless players: use playerList for the full list.
 	 */
-	playerTable: {[userid: string]: RoomGamePlayer};
-	players: RoomGamePlayer[];
+	readonly playerTable: PlayerTable<this['playerPrototype']>;
+	readonly players: this['playerPrototype'][];
 	playerCount: number;
 	playerCap: number;
 	ended: boolean;
@@ -110,7 +117,7 @@ export class RoomGame {
 		this.title = 'Game';
 		this.allowRenames = false;
 		this.isSubGame = isSubGame;
-		this.playerTable = Object.create(null);
+		this.playerTable = {};
 		this.players = [];
 		this.playerCount = 0;
 		this.playerCap = 0;
@@ -123,14 +130,17 @@ export class RoomGame {
 		}
 	}
 
+	get playerPrototype(): this['playerType']['prototype'] {
+		return this.playerType.prototype;
+	}
+
 	destroy() {
 		if (this.isSubGame) {
 			this.room.subGame = null;
 		} else {
 			this.room.game = null;
 		}
-		// @ts-ignore
-		this.room = null;
+		this.room = null!;
 		for (const player of this.players) {
 			player.destroy();
 		}
@@ -156,7 +166,7 @@ export class RoomGame {
 		return player;
 	}
 
-	updatePlayer(player: RoomGamePlayer, user: User | null) {
+	updatePlayer(player: this['playerPrototype'], user: User | null) {
 		if (!this.allowRenames) return;
 		if (player.id) {
 			delete this.playerTable[player.id];
@@ -171,12 +181,13 @@ export class RoomGame {
 		}
 	}
 
-	makePlayer(user: User | string | null, ...rest: any[]) {
+	makePlayer(user: User | string | null, ...rest: any[]): this['playerPrototype'] {
 		const num = this.players.length ? this.players[this.players.length - 1].num : 1;
-		return new RoomGamePlayer(user, this, num);
+		// eslint-disable-next-line new-cap
+		return new this.playerType(user, this, num, ...rest);
 	}
 
-	removePlayer(player: RoomGamePlayer | User) {
+	removePlayer(player: this['playerPrototype'] | User) {
 		if (player instanceof Users.User) {
 			// API changed
 			// TODO: deprecate

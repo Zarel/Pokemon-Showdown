@@ -51,7 +51,7 @@ export class Blackjack extends Rooms.RoomGame {
 
 	dealer: BlackjackDealer;
 	deck: Deck[];
-	playerTable: {[k: string]: BlackjackPlayer};
+	readonly playerType = BlackjackPlayer;
 	gameNumber: number;
 
 	constructor(room: Room, user: User, autostartMinutes = 0) {
@@ -73,7 +73,6 @@ export class Blackjack extends Rooms.RoomGame {
 		this.cardHeight = 85;
 
 		this.spectators = Object.create(null);
-		this.playerTable = Object.create(null);
 		this.dealer = new BlackjackDealer();
 
 		this.symbols = {
@@ -118,9 +117,6 @@ export class Blackjack extends Rooms.RoomGame {
 		}
 
 		this.sendInvite();
-	}
-	makePlayer(user: User) {
-		return new BlackjackPlayer(user, this);
 	}
 	sendInvite() {
 		const change = this.uhtmlChange;

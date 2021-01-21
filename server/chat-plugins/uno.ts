@@ -80,8 +80,7 @@ function createDeck() {
 }
 
 export class UNO extends Rooms.RoomGame {
-	playerTable: {[userid: string]: UNOPlayer};
-	players: UNOPlayer[];
+	readonly playerType = UNOPlayer;
 	playerCap: number;
 	allowRenames: boolean;
 	maxTime: number;
@@ -102,9 +101,6 @@ export class UNO extends Rooms.RoomGame {
 
 	constructor(room: Room, cap: number, suppressMessages: boolean) {
 		super(room);
-
-		this.playerTable = Object.create(null);
-		this.players = [];
 
 		this.gameNumber = room.nextGameNumber();
 
@@ -196,13 +192,6 @@ export class UNO extends Rooms.RoomGame {
 			return true;
 		}
 		return false;
-	}
-
-	/**
-	 * Overwrite the default makePlayer so it makes an UNOPlayer instead.
-	 */
-	makePlayer(user: User) {
-		return new UNOPlayer(user, this);
 	}
 
 	onRename(user: User, oldUserid: ID, isJoining: boolean, isForceRenamed: boolean) {

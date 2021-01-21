@@ -332,8 +332,7 @@ class ScavengerHuntDatabase {
 	}
 }
 export class ScavengerHunt extends Rooms.RoomGame {
-	playerTable: {[userid: string]: ScavengerHuntPlayer};
-	players: ScavengerHuntPlayer[];
+	readonly playerType = ScavengerHuntPlayer;
 	gameType: GameTypes;
 	joinedIps: string[];
 	startTime: number;
@@ -361,9 +360,6 @@ export class ScavengerHunt extends Rooms.RoomGame {
 		mod?: string | string[]
 	) {
 		super(room);
-
-		this.playerTable = Object.create(null);
-		this.players = [];
 
 		this.allowRenames = true;
 		this.gameType = gameType;
@@ -505,11 +501,6 @@ export class ScavengerHunt extends Rooms.RoomGame {
 		this.removePlayer(user);
 		this.leftHunt[user.id] = 1;
 		user.sendTo(this.room, "You have left the scavenger hunt.");
-	}
-
-	// overwrite the default makePlayer so it makes a ScavengerHuntPlayer instead.
-	makePlayer(user: User) {
-		return new ScavengerHuntPlayer(user, this);
 	}
 
 	onLoad(q: (string | string[])[]) {
@@ -993,8 +984,9 @@ export class ScavengerHuntPlayer extends Rooms.RoomGamePlayer {
 	completed: boolean;
 	joinIps: string[];
 	currentQuestion: number;
+	infracted?: true;
 
-	[k: string]: any; // for purposes of adding new temporary properties for the purpose of twists.
+	// [k: string]: any; // for purposes of adding new temporary properties for the purpose of twists.
 	constructor(user: User, game: ScavengerHunt) {
 		super(user, game);
 		this.game = game;

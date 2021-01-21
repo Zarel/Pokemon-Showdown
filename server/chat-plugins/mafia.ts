@@ -258,6 +258,7 @@ class MafiaPlayer extends Rooms.RoomGamePlayer {
 }
 
 class MafiaTracker extends Rooms.RoomGame {
+	readonly playerType = MafiaPlayer;
 	started: boolean;
 	theme: MafiaDataTheme | null;
 	hostid: ID;
@@ -381,10 +382,6 @@ class MafiaTracker extends Rooms.RoomGame {
 		for (const conn of user.connections) {
 			void Chat.resolvePage(`view-mafia-${this.room.roomid}`, user, conn);
 		}
-	}
-
-	makePlayer(user: User) {
-		return new MafiaPlayer(user, this);
 	}
 
 	setRoles(user: User, roleString: string, force = false, reset = false) {

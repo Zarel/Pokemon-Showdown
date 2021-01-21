@@ -14,7 +14,7 @@ interface Question {
 }
 
 export class Jeopardy extends Rooms.RoomGame {
-	playerTable: {[userid: string]: JeopardyGamePlayer};
+	readonly playerType = JeopardyGamePlayer;
 	host: User;
 	state: 'signups' | 'selecting' | 'answering' | 'wagering' | 'buzzing' | 'checking' | 'round2';
 	gameid: ID;
@@ -44,7 +44,6 @@ export class Jeopardy extends Rooms.RoomGame {
 	constructor(room: Room, user: User, categoryCount: number, questionCount: number) {
 		super(room);
 		this.gameNumber = room.nextGameNumber();
-		this.playerTable = Object.create(null);
 		this.host = user;
 		this.allowRenames = true;
 		this.state = "signups";
@@ -77,10 +76,6 @@ export class Jeopardy extends Rooms.RoomGame {
 	destroy() {
 		if (this.timeout) clearTimeout(this.timeout);
 		super.destroy();
-	}
-
-	makePlayer(user: User) {
-		return new JeopardyGamePlayer(user, this);
 	}
 
 	setupGrid() {

@@ -453,6 +453,7 @@ export class RoomBattleTimer {
 }
 
 export class RoomBattle extends RoomGames.RoomGame {
+	readonly playerType = RoomBattlePlayer;
 	readonly gameid: ID;
 	readonly room: GameRoom;
 	readonly title: string;
@@ -479,8 +480,6 @@ export class RoomBattle extends RoomGames.RoomGame {
 	active: boolean;
 	replaySaved: boolean;
 	forcePublic: string | null = null;
-	playerTable: {[userid: string]: RoomBattlePlayer};
-	players: RoomBattlePlayer[];
 	p1: RoomBattlePlayer;
 	p2: RoomBattlePlayer;
 	p3: RoomBattlePlayer;
@@ -517,11 +516,6 @@ export class RoomBattle extends RoomGames.RoomGame {
 		this.ended = false;
 		this.active = false;
 		this.replaySaved = false;
-
-		// TypeScript bug: no `T extends RoomGamePlayer`
-		this.playerTable = Object.create(null);
-		// TypeScript bug: no `T extends RoomGamePlayer`
-		this.players = [];
 
 		this.playerCap = this.gameType === 'multi' || this.gameType === 'free-for-all' ? 4 : 2;
 		this.p1 = null!;
@@ -1038,11 +1032,6 @@ export class RoomBattle extends RoomGames.RoomGame {
 		return player;
 	}
 
-	makePlayer(user: User) {
-		const num = (this.players.length + 1) as PlayerIndex;
-		return new RoomBattlePlayer(user, this, num);
-	}
-
 	updatePlayer(player: RoomBattlePlayer, user: User | null) {
 		super.updatePlayer(player, user);
 
@@ -1109,7 +1098,9 @@ export class RoomBattle extends RoomGames.RoomGame {
 		for (const player of this.players) {
 			player.destroy();
 		}
+		// @ts-ignore
 		this.playerTable = {};
+		// @ts-ignore
 		this.players = [];
 		// @ts-ignore
 		this.p1 = null;
