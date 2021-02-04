@@ -10,9 +10,9 @@
 
 import {ProcessManager, FS, Repl} from '../lib';
 import type * as Database from 'better-sqlite3';
-import {checkRipgrepAvailability} from './config-loader';
 
 import {parseModlog} from '../tools/modlog/converter';
+import {checkRipgrepAvailability} from './config-loader';
 
 const MAX_PROCESSES = 1;
 // If a modlog query takes longer than this, it will be logged.
@@ -134,6 +134,8 @@ export class Modlog {
 	readonly modlogInsertionQuery?: Database.Statement<ModlogEntry>;
 	readonly altsInsertionQuery?: Database.Statement<[number, string]>;
 	readonly renameQuery?: Database.Statement<[string, string]>;
+	readonly globalPunishmentsSearchQuery?: Database.Statement<[string, string, string, number, ...string[]]>;
+
 	readonly insertionTransaction?: Database.Transaction;
 
 	constructor(flatFilePath: string, databasePath: string) {
@@ -157,6 +159,13 @@ export class Modlog {
 
 			this.altsInsertionQuery = this.database!.prepare(`INSERT INTO alts (modlog_id, userid) VALUES (?, ?)`);
 			this.renameQuery = this.database!.prepare(`UPDATE modlog SET roomid = ? WHERE roomid = ?`);
+
+			this.globalPunishmentsSearchQuery = this.database!.prepare(
+				`SELECT * FROM modlog WHERE (roomid = 'global' OR roomid LIKE 'global-%') ` +
+				`AND (userid = ? OR autoconfirmed_userid = ? OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND userid = ?)) ` +
+				`AND timestamp > $timestamp ` +
+				`AND action IN (${this.formatArray(GLOBAL_PUNISHMENTS, [])})`
+			);
 
 			this.insertionTransaction = this.database!.transaction((entries: Iterable<ModlogEntry>) => {
 				for (const entry of entries) {
@@ -216,7 +225,9 @@ export class Modlog {
 
 		let stream = this.sharedStreams.get(sharedStreamId);
 		if (!stream) {
-			stream = FS(`${this.logPath}/modlog_${sharedStreamId}.txt`).createAppendStream();
+			const path = `${this.logPath}/modlog_${sharedStreamId}.txt`;
+			stream = FS(path).createAppendStream();
+			if (!stream) throw new Error(`Could not create append stream for ${path}.`);
 			this.sharedStreams.set(sharedStreamId, stream);
 		}
 		this.streams.set(roomid, stream);
@@ -319,7 +330,7 @@ export class Modlog {
 	/******************************************
 	 * Methods for reading (searching) modlog *
 	 ******************************************/
-	 async runTextSearch(
+	async runTextSearch(
 		rooms: ModlogID[], regexString: string, maxLines: number, onlyPunishments: boolean | string
 	) {
 		const useRipgrep = await checkRipgrepAvailability();
@@ -354,7 +365,6 @@ export class Modlog {
 		}
 		return results.getListClone().filter(Boolean);
 	}
-
 	async runRipgrepSearch(paths: string[], regexString: string, results: SortedLimitedLengthList, lines: number) {
 		let output;
 		try {
@@ -379,7 +389,11 @@ export class Modlog {
 	}
 
 	async getGlobalPunishments(user: User | string, days = 30) {
-		return this.getGlobalPunishmentsText(toID(user), days);
+		if (Config.usesqlite && Config.usesqlitemodlog) {
+			return this.getGlobalPunishmentsSQL(toID(user), days);
+		} else {
+			return this.getGlobalPunishmentsText(toID(user), days);
+		}
 	}
 
 	async getGlobalPunishmentsText(userid: ID, days: number) {
@@ -390,6 +404,17 @@ export class Modlog {
 			onlyPunishments: 'global',
 		});
 		return response.length;
+	}
+
+	getGlobalPunishmentsSQL(userid: ID, days: number) {
+		if (!this.globalPunishmentsSearchQuery) {
+			throw new Error(`Modlog#globalPunishmentsSearchQuery is falsy but an SQL search function was called.`);
+		}
+		const args: (string | number)[] = [
+			userid, userid, userid, Date.now() - (days * 24 * 60 * 60 * 1000), ...GLOBAL_PUNISHMENTS,
+		];
+		const results = this.runSQLWithResults({statement: this.globalPunishmentsSearchQuery, args});
+		return results.length;
 	}
 
 	async search(
@@ -405,18 +430,51 @@ export class Modlog {
 				.map(room => room.roomid) :
 			[roomid]);
 
-		const query = this.prepareSearch(rooms, maxLines, onlyPunishments, search);
-		const results = await PM.query(query);
+		if (Config.usesqlite && Config.usesqlitemodlog) {
+			const query = this.prepareSQLSearch(rooms, maxLines, onlyPunishments, search);
+			const results = this.runSQLWithResults(query).map(row => this.dbRowToModlogEntry(row));
 
-		const duration = Date.now() - startTime;
-		if (duration > LONG_QUERY_DURATION) {
-			Monitor.slow(`[slow modlog] ${duration}ms - ${JSON.stringify(query)}`);
+			const duration = Date.now() - startTime;
+			if (duration > LONG_QUERY_DURATION) {
+				Monitor.slow(`[slow SQL modlog search] ${duration}ms - ${JSON.stringify(query)}`);
+			}
+			return {results, duration};
+		} else {
+			const query = this.prepareTextSearch(rooms, maxLines, onlyPunishments, search);
+			const results = await PM.query(query);
+
+			const duration = Date.now() - startTime;
+			if (duration > LONG_QUERY_DURATION) {
+				Monitor.slow(`[slow text modlog search] ${duration}ms - ${JSON.stringify(query)}`);
+			}
+			return {results, duration};
 		}
-		return {results, duration};
+	}
+
+	dbRowToModlogEntry(row: any): ModlogEntry {
+		let roomID = row.roomid;
+		let isGlobal = false;
+		if (roomID.startsWith('global-')) {
+			roomID = roomID.slice(7);
+			isGlobal = true;
+		}
+		return {
+			action: row.action,
+			roomID,
+			visualRoomID: row.visual_roomid,
+			userid: row.userid,
+			autoconfirmedID: row.autoconfirmed_userid,
+			alts: row.alts?.split(',') || [],
+			ip: row.ip || null,
+			isGlobal,
+			loggedBy: row.action_taker_userid,
+			note: row.note,
+			time: row.timestamp,
+		};
 	}
 
 	prepareSearch(rooms: ModlogID[], maxLines: number, onlyPunishments: boolean, search: ModlogSearch) {
-		return this.prepareTextSearch(rooms, maxLines, onlyPunishments, search);
+		return this.prepareSQLSearch(rooms, maxLines, onlyPunishments, search);
 	}
 
 	prepareTextSearch(
@@ -452,6 +510,96 @@ export class Modlog {
 			maxLines: maxLines,
 			onlyPunishments: onlyPunishments,
 		};
+	}
+
+	prepareSQLSearch(
+		rooms: ModlogID[],
+		maxLines: number,
+		onlyPunishments: boolean,
+		search: ModlogSearch
+	): ModlogSQLQuery<string | number> {
+		for (const room of [...rooms]) {
+			rooms.push(`global-${room}` as ModlogID);
+		}
+
+		const args: (string | number)[] = [];
+
+		let roomChecker = `roomid IN (${this.formatArray(rooms, args)})`;
+		if (rooms.includes('global')) roomChecker = `(roomid LIKE 'global-%' OR ${roomChecker})`;
+
+		let query = `SELECT *, (SELECT group_concat(userid, ',') FROM alts WHERE alts.modlog_id = modlog.modlog_id) as alts FROM modlog`;
+		query += ` WHERE ${roomChecker}`;
+
+		if (search.anyField) {
+			query += ` AND (action LIKE ? || '%'`;
+
+			query += ` OR userid LIKE ? || '%'`;
+			query += ` OR autoconfirmed_userid LIKE ? || '%'`;
+			query += ` OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid LIKE ? || '%')`;
+			query += ` OR action_taker_userid LIKE ? || '%'`;
+
+			query += ` OR ip LIKE ? || '%'`;
+
+			args.push(...Array(6).fill(search.anyField));
+
+			query += ` OR note LIKE '%' || ? || '%')`;
+			args.push(search.anyField);
+		}
+
+		if (search.action) {
+			query += ` AND action LIKE ? || '%'`;
+			args.push(search.action);
+		} else if (onlyPunishments) {
+			query += ` AND action IN (${this.formatArray(PUNISHMENTS, args)})`;
+		}
+
+		if (search.user) {
+			if (search.user.isExact) {
+				query += [
+					` AND ( `,
+					`	userid = ? OR autoconfirmed_userid = ? OR `,
+					`	EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid = ?)`,
+					`)`,
+				].join(' ');
+				args.push(search.user.search, search.user.search, search.user.search);
+			} else {
+				query += [
+					` AND ( `,
+					`	userid LIKE ? || '%' OR autoconfirmed_userid LIKE ? || '%' OR `,
+					`	EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid LIKE ? || '%')`,
+					`)`,
+				].join(' ');
+				args.push(search.user.search, search.user.search, search.user.search);
+			}
+		}
+
+		if (search.ip) {
+			query += ` AND ip LIKE ? || '%'`;
+			args.push(search.ip);
+		}
+
+		if (search.actionTaker) {
+			query += ` AND action_taker_userid LIKE ? || '%'`;
+			args.push(search.actionTaker);
+		}
+
+		if (search.note) {
+			const tester = search.note.isExact ? `= ?` : `LIKE ? || '%'`;
+			const parts = [];
+			for (const noteSearch of search.note.searches) {
+				parts.push(`note ${tester}`);
+				args.push(toID(noteSearch));
+			}
+			query += ` AND (${parts.join(' OR ')})`;
+		}
+
+		query += ` ORDER BY timestamp DESC`;
+		if (maxLines) {
+			query += ` LIMIT ?`;
+			args.push(maxLines);
+		}
+
+		return {statement: this.database!.prepare(query), args};
 	}
 
 	private async readRoomModlog(path: string, results: SortedLimitedLengthList, regex?: RegExp) {
