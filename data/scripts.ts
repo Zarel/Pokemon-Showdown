@@ -154,6 +154,24 @@ export const Scripts: BattleScriptsData = {
 			this.singleEvent('ModifyType', move, null, pokemon, target, move, move);
 			if (move.type !== 'Normal') sourceEffect = move;
 		}
+		if (zMove && sourceEffect) {
+			if (['metronome', 'assist', 'sleeptalk'].includes(sourceEffect.id)) {
+				this.add('message', pokemon.name + ' will change ' + move.name + ' chosen by ' + sourceEffect.name + ' to its Z-Move!');
+			}
+			if (['copycat'].includes(sourceEffect.id)) {
+				this.add('message', pokemon.name + ' will change ' + move.name + ' copied by Copycat to its Z-Move!');
+			}
+			if (['mefirst'].includes(sourceEffect.id)) {
+				this.add('message', pokemon.name + ' will change ' + move.name + ' it stole using Me First to its Z-Move!');
+			}
+			if (['mirrormove'].includes(sourceEffect.id)) {
+				this.add('message', pokemon.name + ' will change ' + move.name + ' to its Z-Move using Mirror Move!');
+			}
+			if (['naturepower'].includes(sourceEffect.id)) {
+				this.singleEvent('ModifyType', move, null, pokemon, target, move, move);
+				this.add('message', pokemon.name + '\'s Nature Power turned into ' + this.getActiveZMove(move, pokemon).name);
+			}
+		}
 		if (zMove || (move.category !== 'Status' && sourceEffect && (sourceEffect as ActiveMove).isZ)) {
 			move = this.getActiveZMove(move, pokemon);
 		}
