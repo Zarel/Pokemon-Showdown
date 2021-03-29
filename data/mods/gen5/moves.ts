@@ -829,12 +829,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 	soak: {
 		inherit: true,
 		onHit(target) {
-			if (!target.setType('Water')) {
-				// Soak should animate even when it fails.
-				// Returning false would suppress the animation.
-				this.add('-fail', target);
-				return null;
-			}
+			if (!target.setType('Water')) return false;
 			this.add('-start', target, 'typechange', 'Water');
 		},
 	},

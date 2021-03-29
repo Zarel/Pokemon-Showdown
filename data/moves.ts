@@ -2552,6 +2552,8 @@ export const Moves: {[moveid: string]: MoveData} = {
 			const item = target.takeItem(source);
 			if (item) {
 				this.add('-enditem', target, item.name, '[from] move: Corrosive Gas', '[of] ' + source);
+			} else {
+				this.add('-fail', target, 'move: Corrosive Gas');
 			}
 		},
 		secondary: null,
@@ -4054,7 +4056,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 			onSetStatus(status, target, source, effect) {
 				if (status.id === 'slp' && target.isGrounded() && !target.isSemiInvulnerable()) {
 					if (effect.id === 'yawn' || (effect.effectType === 'Move' && !effect.secondaries)) {
-						this.add('-activate', target, 'move: Electric Terrain');
+						this.add('-immune', target, 'move: Electric Terrain');
 					}
 					return false;
 				}
@@ -4062,7 +4064,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 			onTryAddVolatile(status, target) {
 				if (!target.isGrounded() || target.isSemiInvulnerable()) return;
 				if (status.id === 'yawn') {
-					this.add('-activate', target, 'move: Electric Terrain');
+					this.add('-immune', target, 'move: Electric Terrain');
 					return null;
 				}
 			},
@@ -7032,9 +7034,9 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 20,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1, nonsky: 1},
-		onTryHit(target, source, move) {
+		onTryHit(target, source) {
 			if (target.volatiles['dynamax']) {
-				this.add('-fail', source, 'move: Grass Knot', '[from] Dynamax');
+				this.add('-immune', source, 'Dynamax');
 				this.attrLastMove('[still]');
 				return null;
 			}
@@ -7921,9 +7923,9 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 10,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1, nonsky: 1},
-		onTryHit(target, pokemon, move) {
+		onTryHit(target, source) {
 			if (target.volatiles['dynamax']) {
-				this.add('-fail', pokemon, 'Dynamax');
+				this.add('-immune', source, 'Dynamax');
 				this.attrLastMove('[still]');
 				return null;
 			}
@@ -7978,9 +7980,9 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 10,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1, nonsky: 1},
-		onTryHit(target, pokemon, move) {
+		onTryHit(target, source) {
 			if (target.volatiles['dynamax']) {
-				this.add('-fail', pokemon, 'Dynamax');
+				this.add('-immune', source, 'Dynamax');
 				this.attrLastMove('[still]');
 				return null;
 			}
@@ -9005,7 +9007,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 			},
 			// groundedness implemented in battle.engine.js:BattlePokemon#isGrounded
 			onDragOut(pokemon) {
-				this.add('-activate', pokemon, 'move: Ingrain');
+				this.add('-immune', pokemon, 'move: Ingrain');
 				return null;
 			},
 		},
@@ -9798,9 +9800,9 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 20,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1},
-		onTryHit(target, pokemon, move) {
+		onTryHit(target, source) {
 			if (target.volatiles['dynamax']) {
-				this.add('-fail', pokemon, 'Dynamax');
+				this.add('-immune', source, 'Dynamax');
 				this.attrLastMove('[still]');
 				return null;
 			}
@@ -10144,7 +10146,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 
 			// Additional Gravity check for Z-move variant
 			if (this.field.getPseudoWeather('Gravity')) {
-				this.add('cant', source, 'move: Gravity', move);
+				this.add('-fail', source, 'move: Gravity', move);
 				return null;
 			}
 		},
@@ -11330,7 +11332,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 						}
 					}
 					if (showMsg && !(effect as ActiveMove).secondaries) {
-						this.add('-activate', target, 'move: Mist');
+						this.add('-immune', target, 'move: Mist');
 					}
 				}
 			},
@@ -11409,14 +11411,14 @@ export const Moves: {[moveid: string]: MoveData} = {
 			onSetStatus(status, target, source, effect) {
 				if (!target.isGrounded() || target.isSemiInvulnerable()) return;
 				if (effect && ((effect as Move).status || effect.id === 'yawn')) {
-					this.add('-activate', target, 'move: Misty Terrain');
+					this.add('-immune', target, 'move: Misty Terrain');
 				}
 				return false;
 			},
 			onTryAddVolatile(status, target, source, effect) {
 				if (!target.isGrounded() || target.isSemiInvulnerable()) return;
 				if (status.id === 'confusion') {
-					if (effect.effectType === 'Move' && !effect.secondaries) this.add('-activate', target, 'move: Misty Terrain');
+					if (effect.effectType === 'Move' && !effect.secondaries) this.add('-immune', target, 'move: Misty Terrain');
 					return null;
 				}
 			},
@@ -12721,7 +12723,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		onHit(target, source) {
 			if (source.side === target.side) {
 				if (!this.heal(Math.floor(target.baseMaxhp * 0.5))) {
-					this.add('-immune', target);
+					this.add('-fail', target);
 				}
 			}
 		},
@@ -13942,7 +13944,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 10,
 		priority: 0,
 		flags: {snatch: 1, heal: 1},
-		onTry(source) {
+		onTry(source, target, move) {
 			if (source.status === 'slp' || source.hasAbility('comatose')) return false;
 
 			if (source.hp === source.maxhp) {
@@ -13950,7 +13952,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 				return null;
 			}
 			if (source.hasAbility(['insomnia', 'vitalspirit'])) {
-				this.add('-fail', source, '[from] ability: ' + source.getAbility().name, '[of] ' + source);
+				this.add('-fail', source, move, '[from] ability: ' + source.getAbility().name, '[of] ' + source);
 				return null;
 			}
 		},
@@ -14529,7 +14531,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 				if (target !== source) {
 					this.debug('interrupting setStatus');
 					if (effect.id === 'synchronize' || (effect.effectType === 'Move' && !effect.secondaries)) {
-						this.add('-activate', target, 'move: Safeguard');
+						this.add('-immune', target, 'move: Safeguard');
 					}
 					return null;
 				}
@@ -14538,7 +14540,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 				if (!effect || !source) return;
 				if (effect.effectType === 'Move' && effect.infiltrates && target.side !== source.side) return;
 				if ((status.id === 'confusion' || status.id === 'yawn') && target !== source) {
-					if (effect.effectType === 'Move' && !effect.secondaries) this.add('-activate', target, 'move: Safeguard');
+					if (effect.effectType === 'Move' && !effect.secondaries) this.add('-immune', target, 'move: Safeguard');
 					return null;
 				}
 			},
@@ -15164,7 +15166,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		onTryMove(pokemon) {
 			if (!pokemon.volatiles['shelltrap']?.gotHit) {
 				this.attrLastMove('[still]');
-				this.add('cant', pokemon, 'Shell Trap', 'Shell Trap');
+				this.add('-fail', pokemon, 'Shell Trap', 'Shell Trap');
 				return null;
 			}
 		},
@@ -16027,12 +16029,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		priority: 0,
 		flags: {protect: 1, reflectable: 1, mirror: 1, mystery: 1},
 		onHit(target) {
-			if (target.getTypes().join() === 'Water' || !target.setType('Water')) {
-				// Soak should animate even when it fails.
-				// Returning false would suppress the animation.
-				this.add('-fail', target);
-				return null;
-			}
+			if (target.getTypes().join() === 'Water' || !target.setType('Water')) return false;
 			this.add('-start', target, 'typechange', 'Water');
 		},
 		secondary: null,
@@ -16501,7 +16498,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		onTry(source, target, move) {
 			// Additional Gravity check for Z-move variant
 			if (this.field.getPseudoWeather('Gravity')) {
-				this.add('cant', source, 'move: Gravity', move);
+				this.add('-fail', source, 'move: Gravity', move);
 				return null;
 			}
 		},
@@ -17747,7 +17744,8 @@ export const Moves: {[moveid: string]: MoveData} = {
 		priority: 0,
 		flags: {authentic: 1},
 		onHitField(target, source, move) {
-			let result = false;
+			this.add('-activate', source, 'move: Teatime');
+			let result = null;
 			for (const active of this.getAllActive()) {
 				if (this.runEvent('Invulnerability', active, source, move) === false) {
 					this.add('-miss', source, active);
@@ -17760,6 +17758,9 @@ export const Moves: {[moveid: string]: MoveData} = {
 						result = true;
 					}
 				}
+			}
+			if (!result) {
+				this.add('-fail', source, '[from] ' + move);
 			}
 			return result;
 		},
@@ -17832,7 +17833,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 			// Additional Gravity check for Z-move variant
 			if (this.field.getPseudoWeather('Gravity')) {
 				this.attrLastMove('[still]');
-				this.add('cant', source, 'move: Gravity', move);
+				this.add('-fail', source, 'move: Gravity', move);
 				return null;
 			}
 		},
@@ -18739,9 +18740,9 @@ export const Moves: {[moveid: string]: MoveData} = {
 			onAnySetStatus(status, pokemon) {
 				if (status.id === 'slp') {
 					if (pokemon === this.effectData.target) {
-						this.add('-fail', pokemon, 'slp', '[from] Uproar', '[msg]');
+						this.add('-immune', pokemon, 'slp', '[from] Uproar', '[msg]');
 					} else {
-						this.add('-fail', pokemon, 'slp', '[from] Uproar');
+						this.add('-immune', pokemon, 'slp', '[from] Uproar');
 					}
 					return null;
 				}

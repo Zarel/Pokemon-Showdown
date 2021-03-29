@@ -251,6 +251,8 @@ export const MovesText: {[k: string]: MoveText} = {
 		name: "Aura Wheel",
 		desc: "Has a 100% chance to raise the user's Speed by 1 stage. If the user is a Morpeko in Full Belly Mode, this move is Electric type. If the user is a Morpeko in Hangry Mode, this move is Dark type. This move cannot be used successfully unless the user's current form, while considering Transform, is Full Belly or Hangry Mode Morpeko.",
 		shortDesc: "Morpeko: Electric; Hangry: Dark; 100% +1 Spe.",
+
+		fail: "#hyperspacefury",
 	},
 	aurorabeam: {
 		name: "Aurora Beam",
@@ -949,6 +951,7 @@ export const MovesText: {[k: string]: MoveText} = {
 		shortDesc: "Removes adjacent Pokemon's held items.",
 
 		removeItem: "  [SOURCE] corroded [POKEMON]'s [ITEM]!",
+		fail: "#healblock",
 	},
 	cosmicpower: {
 		name: "Cosmic Power",
@@ -1092,8 +1095,7 @@ export const MovesText: {[k: string]: MoveText} = {
 			shortDesc: "Causes the foe(s) to fall asleep.",
 		},
 
-		fail: "But [POKEMON] can't use the move!",
-		failWrongForme: "But [POKEMON] can't use it the way it is now!",
+		fail: "#hyperspacefury",
 	},
 	dazzlinggleam: {
 		name: "Dazzling Gleam",
@@ -1234,6 +1236,7 @@ export const MovesText: {[k: string]: MoveText} = {
 		},
 
 		start: "  [POKEMON]'s [MOVE] was disabled!",
+		cant: "  [POKEMON]'s [MOVE] is disabled!",
 		end: "  [POKEMON]'s move is no longer disabled!",
 	},
 	disarmingvoice: {
@@ -2900,7 +2903,8 @@ export const MovesText: {[k: string]: MoveText} = {
 		},
 
 		activate: "#shadowforce",
-		fail: "#darkvoid",
+		fail: "  But [POKEMON] can't use the move!",
+		failWrongForme: "  But [POKEMON] can't use it the way it is now!",
 	},
 	hyperspacehole: {
 		name: "Hyperspace Hole",
@@ -3410,7 +3414,7 @@ export const MovesText: {[k: string]: MoveText} = {
 		desc: "Has a 100% chance to confuse the target and lower its Defense and Special Attack by 1 stage. The user recovers 1/2 the HP lost by the target, rounded half up. If Big Root is held by the user, the HP recovered is 1.3x normal, rounded half down. The user steals the foe's boosts. If this move is successful, the weather changes to rain unless it is already in effect, and the user gains the effects of Aqua Ring and Magic Coat.",
 		shortDesc: "Does many things turn 1. Can't move turn 2.",
 
-		fail: "#darkvoid",
+		fail: "#hyperspacefury",
 	},
 	magmastorm: {
 		name: "Magma Storm",
@@ -4745,6 +4749,8 @@ export const MovesText: {[k: string]: MoveText} = {
 		gen1: {
 			desc: "The user falls asleep for the next two turns and restores all of its HP, curing itself of any non-volatile status condition in the process. This does not remove the user's stat penalty for burn or paralysis. Fails if the user has full HP.",
 		},
+		fail: "  [POKEMON] stayed awake!",
+
 	},
 	retaliate: {
 		name: "Retaliate",
@@ -6138,6 +6144,9 @@ export const MovesText: {[k: string]: MoveText} = {
 		name: "Teatime",
 		desc: "All active Pokemon consume their held Berries. This effect is not prevented by substitutes, the Klutz or Unnerve Abilities, or the effects of Embargo or Magic Room. Fails if no active Pokemon is holding a Berry.",
 		shortDesc: "All active Pokemon consume held Berries.",
+
+		activate: "  It's teatime! Everyone dug in to their Berries!",
+		fail: "  But nothing happened!",
 	},
 	technoblast: {
 		name: "Techno Blast",

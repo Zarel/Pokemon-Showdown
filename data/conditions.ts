@@ -313,7 +313,7 @@ export const Conditions: {[k: string]: ConditionData} = {
 				this.addMove('move', pokemon, move.name);
 				this.attrLastMove('[still]');
 				this.debug("Disabled by Choice item lock");
-				this.add('-fail', pokemon);
+				this.add('cant', pokemon, 'choicelock');
 				return false;
 			}
 		},
@@ -478,7 +478,7 @@ export const Conditions: {[k: string]: ConditionData} = {
 		onTryMove(attacker, defender, move) {
 			if (move.type === 'Fire' && move.category !== 'Status') {
 				this.debug('Primordial Sea fire suppress');
-				this.add('-fail', attacker, move, '[from] Primordial Sea');
+				this.add('-immune', attacker, move, '[from] Primordial Sea');
 				this.attrLastMove('[still]');
 				return null;
 			}
@@ -552,7 +552,7 @@ export const Conditions: {[k: string]: ConditionData} = {
 		onTryMove(attacker, defender, move) {
 			if (move.type === 'Water' && move.category !== 'Status') {
 				this.debug('Desolate Land water suppress');
-				this.add('-fail', attacker, move, '[from] Desolate Land');
+				this.add('-immune', attacker, move, '[from] Desolate Land');
 				this.attrLastMove('[still]');
 				return null;
 			}
@@ -711,7 +711,7 @@ export const Conditions: {[k: string]: ConditionData} = {
 		},
 		onDragOutPriority: 2,
 		onDragOut(pokemon) {
-			this.add('-block', pokemon, 'Dynamax');
+			this.add('-immune', pokemon, 'Dynamax');
 			return null;
 		},
 		onResidualPriority: -100,

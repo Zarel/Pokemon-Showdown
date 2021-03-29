@@ -168,7 +168,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			if (['attract', 'disable', 'encore', 'healblock', 'taunt', 'torment'].includes(status.id)) {
 				if (effect.effectType === 'Move') {
 					const effectHolder = this.effectData.target;
-					this.add('-block', target, 'ability: Aroma Veil', '[of] ' + effectHolder);
+					this.add('-immune', target, 'ability: Aroma Veil', '[of] ' + effectHolder);
 				}
 				return null;
 			}
@@ -569,7 +569,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 		onAnyTryMove(target, source, effect) {
 			if (['explosion', 'mindblown', 'mistyexplosion', 'selfdestruct'].includes(effect.id)) {
 				this.attrLastMove('[still]');
-				this.add('cant', this.effectData.target, 'ability: Damp', effect, '[of] ' + target);
+				this.add('-immune', this.effectData.target, 'ability: Damp', effect, target);
 				return false;
 			}
 		},
@@ -622,7 +622,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			const dazzlingHolder = this.effectData.target;
 			if ((source.side === dazzlingHolder.side || move.target === 'all') && move.priority > 0.1) {
 				this.attrLastMove('[still]');
-				this.add('cant', dazzlingHolder, 'ability: Dazzling', move, '[of] ' + target);
+				this.add('-immune', dazzlingHolder, 'ability: Queenly Majesty', move, target);
 				return false;
 			}
 		},
@@ -1036,7 +1036,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			}
 			if (showMsg && !(effect as ActiveMove).secondaries) {
 				const effectHolder = this.effectData.target;
-				this.add('-block', target, 'ability: Flower Veil', '[of] ' + effectHolder);
+				this.add('-immune', target, 'ability: Flower Veil', '[of] ' + effectHolder);
 			}
 		},
 		onAllySetStatus(status, target, source, effect) {
@@ -1044,7 +1044,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 				this.debug('interrupting setStatus with Flower Veil');
 				if (effect.id === 'synchronize' || (effect.effectType === 'Move' && !effect.secondaries)) {
 					const effectHolder = this.effectData.target;
-					this.add('-block', target, 'ability: Flower Veil', '[of] ' + effectHolder);
+					this.add('-immune', target, 'ability: Flower Veil', '[of] ' + effectHolder);
 				}
 				return null;
 			}
@@ -1053,7 +1053,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			if (target.hasType('Grass') && status.id === 'yawn') {
 				this.debug('Flower Veil blocking yawn');
 				const effectHolder = this.effectData.target;
-				this.add('-block', target, 'ability: Flower Veil', '[of] ' + effectHolder);
+				this.add('-immune', target, 'ability: Flower Veil', '[of] ' + effectHolder);
 				return null;
 			}
 		},
@@ -1234,7 +1234,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 				this.addMove('move', pokemon, move.name);
 				this.attrLastMove('[still]');
 				this.debug("Disabled by Gorilla Tactics");
-				this.add('-fail', pokemon);
+				this.add('cant', pokemon, 'choicelock');
 				return false;
 			}
 		},
@@ -2488,7 +2488,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			if (!['psn', 'tox'].includes(status.id)) return;
 			if ((effect as Move)?.status) {
 				const effectHolder = this.effectData.target;
-				this.add('-block', target, 'ability: Pastel Veil', '[of] ' + effectHolder);
+				this.add('-immune', target, 'ability: Pastel Veil', '[of] ' + effectHolder);
 			}
 			return false;
 		},
@@ -2801,7 +2801,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			const dazzlingHolder = this.effectData.target;
 			if ((source.side === dazzlingHolder.side || move.target === 'all') && move.priority > 0.1) {
 				this.attrLastMove('[still]');
-				this.add('cant', dazzlingHolder, 'ability: Queenly Majesty', move, '[of] ' + target);
+				this.add('-immune', dazzlingHolder, 'ability: Queenly Majesty', move, target);
 				return false;
 			}
 		},
@@ -3665,7 +3665,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 	suctioncups: {
 		onDragOutPriority: 1,
 		onDragOut(pokemon) {
-			this.add('-activate', pokemon, 'ability: Suction Cups');
+			this.add('-immune', pokemon, 'ability: Suction Cups');
 			return null;
 		},
 		name: "Suction Cups",
@@ -3715,7 +3715,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			if (status.id === 'slp') {
 				this.debug('Sweet Veil interrupts sleep');
 				const effectHolder = this.effectData.target;
-				this.add('-block', target, 'ability: Sweet Veil', '[of] ' + effectHolder);
+				this.add('-immune', target, 'ability: Sweet Veil', '[of] ' + effectHolder);
 				return null;
 			}
 		},
@@ -3723,7 +3723,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			if (status.id === 'yawn') {
 				this.debug('Sweet Veil blocking yawn');
 				const effectHolder = this.effectData.target;
-				this.add('-block', target, 'ability: Sweet Veil', '[of] ' + effectHolder);
+				this.add('-immune', target, 'ability: Sweet Veil', '[of] ' + effectHolder);
 				return null;
 			}
 		},
@@ -3814,7 +3814,7 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 	telepathy: {
 		onTryHit(target, source, move) {
 			if (target !== source && target.side === source.side && move.category !== 'Status') {
-				this.add('-activate', target, 'ability: Telepathy');
+				this.add('-immune', target, 'ability: Telepathy');
 				return null;
 			}
 		},

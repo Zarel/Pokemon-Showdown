@@ -923,6 +923,7 @@ export const AbilitiesText: {[k: string]: AbilityText} = {
 			desc: "This Pokemon cannot be confused. Gaining this Ability while confused cures it.",
 			shortDesc: "This Pokemon cannot be confused.",
 		},
+		block: "  [POKEMON] cannot be confused!",
 	},
 	parentalbond: {
 		name: "Parental Bond",
