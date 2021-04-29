@@ -1029,6 +1029,9 @@ export class CommandContext extends MessageContext {
 		if (!user.named) {
 			throw new Chat.ErrorMessage(this.tr`You must choose a name before you can talk.`);
 		}
+		if (targetUser && !this.canPM(targetUser)) {
+			return null;
+		}
 		if (!user.can('bypassall')) {
 			const lockType = (user.namelocked ? this.tr`namelocked` : user.locked ? this.tr`locked` : ``);
 			const lockExpiration = Punishments.checkLockExpiration(user.namelocked || user.locked);
@@ -1066,30 +1069,6 @@ export class CommandContext extends MessageContext {
 				if (lockType && !targetUser.can('lock')) {
 					this.sendReply(`|html|<a href="view-help-request--appeal" class="button">${this.tr`Get help with this`}</a>`);
 					throw new Chat.ErrorMessage(this.tr`You are ${lockType} and can only private message members of the global moderation team. ${lockExpiration}`);
-				}
-				if (targetUser.locked && !user.can('lock')) {
-					throw new Chat.ErrorMessage(this.tr`The user "${targetUser.name}" is locked and cannot be PMed.`);
-				}
-				if (Config.pmmodchat && !Users.globalAuth.atLeast(user, Config.pmmodchat) &&
-					!Users.Auth.hasPermission(targetUser, 'promote', Config.pmmodchat as GroupSymbol)) {
-					const groupName = Config.groups[Config.pmmodchat] && Config.groups[Config.pmmodchat].name || Config.pmmodchat;
-					throw new Chat.ErrorMessage(this.tr`On this server, you must be of rank ${groupName} or higher to PM users.`);
-				}
-				if (targetUser.settings.blockPMs &&
-					(targetUser.settings.blockPMs === true || !Users.globalAuth.atLeast(user, targetUser.settings.blockPMs)) &&
-					!user.can('lock') && targetUser.id !== user.id) {
-					Chat.maybeNotifyBlocked('pm', targetUser, user);
-					if (!targetUser.can('lock')) {
-						throw new Chat.ErrorMessage(this.tr`This user is blocking private messages right now.`);
-					} else {
-						this.sendReply(`|html|${this.tr`If you need help, try opening a <a href="view-help-request" class="button">help ticket</a>`}`);
-						throw new Chat.ErrorMessage(this.tr`This ${Config.groups[targetUser.tempGroup].name} is too busy to answer private messages right now. Please contact a different staff member.`);
-					}
-				}
-				if (user.settings.blockPMs && (user.settings.blockPMs === true ||
-					!Users.globalAuth.atLeast(targetUser, user.settings.blockPMs)) && !targetUser.can('lock') &&
-					targetUser.id !== user.id) {
-					throw new Chat.ErrorMessage(this.tr`You are blocking private messages right now.`);
 				}
 			}
 		}
@@ -1171,6 +1150,46 @@ export class CommandContext extends MessageContext {
 
 		return message;
 	}
+	canPM(targetUser: User) {
+		const user = this.user;
+
+		const userSettings = user.settings.blockPMs;
+		const targetUserSettings = targetUser.settings.blockPMs;
+
+		if (targetUser.locked && !user.can('lock')) {
+			throw new Chat.ErrorMessage(this.tr`The user "${targetUser.name}" is locked and cannot be PMed.`);
+		}
+		if (
+			Config.pmmodchat && !Users.globalAuth.atLeast(user, Config.pmmodchat) &&
+			!Users.Auth.hasPermission(targetUser, 'promote', Config.pmmodchat as GroupSymbol)
+		) {
+			const groupName = Config.groups[Config.pmmodchat] && Config.groups[Config.pmmodchat].name || Config.pmmodchat;
+			throw new Chat.ErrorMessage(this.tr`On this server, you must be of rank ${groupName} or higher to PM users.`);
+		}
+		if (
+			(targetUserSettings.all === true ||
+			!Users.globalAuth.atLeast(user, targetUserSettings.all as GroupSymbol) && typeof targetUserSettings.all === 'string' ||
+			targetUserSettings.specific?.includes(user.id)) &&
+			!user.can('lock')
+		) {
+			Chat.maybeNotifyBlocked('pm', targetUser, user);
+			if (!targetUser.can('lock')) {
+				throw new Chat.ErrorMessage(this.tr`This user is blocking private messages right now.`);
+			} else {
+				this.errorReply(this.tr`This ${Config.groups[targetUser.tempGroup].name} is too busy to answer private messages right now. Please contact a different staff member.`);
+			  throw new Chat.ErrorMessage(this.tr`|html|If you need help, try opening a <a href="view-help-request" class="button">help ticket</a>`);
+			}
+		}
+		if (
+			userSettings.all === true ||
+			!Users.globalAuth.atLeast(targetUser, userSettings.all as GroupSymbol) && typeof userSettings.all === 'string' ||
+			userSettings.specific.includes(targetUser.id)
+		) {
+			const isBlocked = user.settings.blockPMs.specific?.includes(targetUser.id);
+			throw new Chat.ErrorMessage(this.tr`You are blocking private messages ${isBlocked ? 'from this user ' : ''}right now.`);
+		}
+		return true;
+	}
 	checkPMHTML(targetUser: User | null) {
 		if (!targetUser?.connected) {
 			throw new Chat.ErrorMessage(`User ${this.targetUsername} is not currently online.`);
@@ -1178,8 +1197,9 @@ export class CommandContext extends MessageContext {
 		if (!(this.room && (targetUser.id in this.room.users)) && !this.user.can('addhtml')) {
 			throw new Chat.ErrorMessage("You do not have permission to use PM HTML to users who are not in this room.");
 		}
-		if (targetUser.settings.blockPMs &&
-			(targetUser.settings.blockPMs === true || !Users.globalAuth.atLeast(this.user, targetUser.settings.blockPMs)) &&
+		this.canPM(targetUser);
+		if (targetUser.settings.blockPMs.all &&
+			(targetUser.settings.blockPMs.all === true || !Users.globalAuth.atLeast(this.user, targetUser.settings.blockPMs.all)) &&
 			!this.user.can('lock')
 		) {
 			Chat.maybeNotifyBlocked('pm', targetUser, this.user);

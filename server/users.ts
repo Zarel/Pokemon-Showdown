@@ -307,7 +307,10 @@ type ChatQueueEntry = [string, RoomID, Connection];
 
 export interface UserSettings {
 	blockChallenges: boolean;
-	blockPMs: boolean | AuthLevel;
+	blockPMs: {
+		all: boolean | AuthLevel,
+		specific: string[],
+	};
 	ignoreTickets: boolean;
 	hideBattlesFromTrainerCard: boolean;
 	blockInvites: AuthLevel | boolean;
@@ -435,7 +438,10 @@ export class User extends Chat.MessageContext {
 		// settings
 		this.settings = {
 			blockChallenges: false,
-			blockPMs: false,
+			blockPMs: {
+				all: false,
+				specific: [],
+			},
 			ignoreTickets: false,
 			hideBattlesFromTrainerCard: false,
 			blockInvites: false,
@@ -1090,7 +1096,12 @@ export class User extends Chat.MessageContext {
 				this.semilocked = '#dnsbl.' as PunishType;
 			}
 		}
-		if (this.settings.blockPMs && this.can('lock') && !this.can('bypassall')) this.settings.blockPMs = false;
+		if (this.settings.blockPMs && this.can('lock') && !this.can('bypassall')) {
+			this.settings.blockPMs = {
+				all: false,
+				specific: [],
+			};
+		}
 	}
 	/**
 	 * Set a user's group. Pass (' ', true) to force trusted
