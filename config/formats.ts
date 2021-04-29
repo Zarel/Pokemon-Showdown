@@ -640,6 +640,8 @@ export const Formats: FormatList = [
 			'Diglett-Base', 'Dugtrio-Base', 'Gothita', 'Gothitelle', 'Gothorita', 'Trapinch', 'Wobbuffet', 'Wynaut',
 		],
 		onBegin() {
+			const isNativeMod = this.dex.currentMod === 'pokebilities';
+			const nonNativeUnsafeAbilities = ['trace', 'mirrorarmor'];
 			for (const pokemon of this.getAllPokemon()) {
 				if (pokemon.ability === this.toID(pokemon.species.abilities['S'])) {
 					continue;
@@ -647,7 +649,8 @@ export const Formats: FormatList = [
 				pokemon.m.innates = Object.keys(pokemon.species.abilities)
 					.filter(key => key !== 'S' && (key !== 'H' || !pokemon.species.unreleasedHidden))
 					.map(key => this.toID(pokemon.species.abilities[key as "0" | "1" | "H" | "S"]))
-					.filter(ability => ability !== pokemon.ability);
+					.filter(ability => (ability !== pokemon.ability) &&
+						(isNativeMod || !nonNativeUnsafeAbilities.includes(ability)));
 			}
 		},
 		onSwitchInPriority: 2,
