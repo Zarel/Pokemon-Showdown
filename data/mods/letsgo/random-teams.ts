@@ -218,9 +218,8 @@ export class RandomLetsGoTeams extends RandomTeams {
 	randomTeam() {
 		const pokemon: RandomTeamsTypes.RandomSet[] = [];
 
-		const pokemonPool: string[] = [];
-		for (const id in this.dex.data.FormatsData) {
-			const species = this.dex.species.get(id);
+		const pokemonPool: Species[] = [];
+		for (const species of this.dex.species.all()) {
 			if (
 				species.num < 1 ||
 				(species.num > 151 && ![808, 809].includes(species.num)) ||
@@ -231,7 +230,7 @@ export class RandomLetsGoTeams extends RandomTeams {
 			) {
 				continue;
 			}
-			pokemonPool.push(id);
+			pokemonPool.push(species);
 		}
 
 		const typeCount: {[k: string]: number} = {};
@@ -240,7 +239,7 @@ export class RandomLetsGoTeams extends RandomTeams {
 		const teamDetails: RandomTeamsTypes.TeamDetails = {};
 
 		while (pokemonPool.length && pokemon.length < this.maxTeamSize) {
-			const species = this.dex.species.get(this.sampleNoReplace(pokemonPool));
+			const species = this.sampleNoReplace(pokemonPool);
 			if (!species.exists) continue;
 
 			// Limit to one of each species (Species Clause)

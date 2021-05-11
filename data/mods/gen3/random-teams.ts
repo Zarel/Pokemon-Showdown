@@ -259,7 +259,7 @@ export class RandomGen3Teams extends RandomGen4Teams {
 		if (counter.Physical >= 4 && !hasMove['fakeout']) return 'Choice Band';
 		if (counter.Physical >= 3 && !hasMove['rapidspin'] && (
 			['firepunch', 'icebeam', 'overheat'].some(m => hasMove[m]) ||
-			(moves.filter(m => this.dex.data.Moves[m].category === 'Special' && hasType[this.dex.data.Moves[m].type]).length)
+			(moves.filter(m => this.dex.moves.get(m).category === 'Special' && hasType[this.dex.moves.get(m).type]).length)
 		)) {
 			return 'Choice Band';
 		}
@@ -352,7 +352,7 @@ export class RandomGen3Teams extends RandomGen4Teams {
 
 			// Choose next 4 moves from learnset/viable moves and add them to moves list:
 			while (moves.length < 4 && movePool.length) {
-				const moveid = this.sampleNoReplace(movePool);
+				const moveid = this.sampleNoReplace(movePool) as ID;
 				if (moveid.startsWith('hiddenpower')) {
 					availableHP--;
 					if (hasMove['hiddenpower']) continue;
@@ -363,7 +363,7 @@ export class RandomGen3Teams extends RandomGen4Teams {
 				moves.push(moveid);
 			}
 			while (moves.length < 4 && rejectedPool.length) {
-				const moveid = this.sampleNoReplace(rejectedPool);
+				const moveid = this.sampleNoReplace(rejectedPool) as ID;
 				hasMove[moveid] = true;
 				moves.push(moveid);
 			}

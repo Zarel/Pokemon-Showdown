@@ -218,7 +218,7 @@ export class RandomTeams {
 	 * Remove an element from an unsorted array significantly faster
 	 * than .splice
 	 */
-	fastPop(list: any[], index: number) {
+	fastPop<T>(list: T[], index: number): T {
 		// If an array doesn't need to be in order, replacing the
 		// element at the given index with the removed element
 		// is much, much faster than using list.splice(index, 1).
@@ -238,7 +238,7 @@ export class RandomTeams {
 	 * Remove a random element from an unsorted array and return it.
 	 * Uses the battle's RNG if in a battle.
 	 */
-	sampleNoReplace(list: any[]) {
+	sampleNoReplace<T>(list: T[]): T {
 		const length = list.length;
 		const index = this.random(length);
 		return this.fastPop(list, index);
@@ -275,8 +275,8 @@ export class RandomTeams {
 		const dex = this.dex;
 		const team = [];
 
-		const natures = Object.keys(this.dex.data.Natures);
-		const items = Object.keys(this.dex.data.Items);
+		const natures = this.dex.natures.all();
+		const items = this.dex.items.all();
 
 		const randomN = this.randomNPokemon(this.maxTeamSize, this.forceMonotype);
 
@@ -288,8 +288,8 @@ export class RandomTeams {
 			let item = '';
 			if (this.gen >= 2) {
 				do {
-					item = this.sample(items);
-				} while (this.dex.items.get(item).gen > this.gen || this.dex.data.Items[item].isNonstandard);
+					item = this.sample(items).id;
+				} while (this.dex.items.get(item).gen > this.gen || this.dex.items.get(item).isNonstandard);
 			}
 
 			// Make sure forme is legal
@@ -310,7 +310,7 @@ export class RandomTeams {
 			let itemData = this.dex.items.get(item);
 			if (itemData.forcedForme && forme === this.dex.species.get(itemData.forcedForme).baseSpecies) {
 				do {
-					item = this.sample(items);
+					item = this.sample(items).id;
 					itemData = this.dex.items.get(item);
 				} while (
 					itemData.gen > this.gen ||
@@ -321,15 +321,14 @@ export class RandomTeams {
 
 			// Random legal ability
 			const abilities = Object.values(species.abilities).filter(a => this.dex.abilities.get(a).gen <= this.gen);
-			const ability: string = this.gen <= 2 ? 'None' : this.sample(abilities);
+			const ability: string = this.gen <= 2 ? 'No Ability' : this.sample(abilities);
 
 			// Four random unique moves from the movepool
 			let pool = ['struggle'];
 			if (forme === 'Smeargle') {
-				pool = Object.keys(this.dex.data.Moves).filter(moveid => {
-					const move = this.dex.data.Moves[moveid];
-					return !(move.isNonstandard || move.isZ || move.isMax || move.realMove);
-				});
+				pool = this.dex.moves.all().filter(move => (
+					!(move.isNonstandard || move.isZ || move.isMax || move.realMove)
+				)).map(move => move.id);
 			} else {
 				const formes = ['gastrodoneast', 'pumpkaboosuper', 'zygarde10'];
 				let learnset = this.dex.data.Learnsets[species.id]?.learnset && !formes.includes(species.id) ?
@@ -373,7 +372,7 @@ export class RandomTeams {
 			};
 
 			// Random nature
-			const nature = this.sample(natures);
+			const nature = this.sample(natures).name;
 
 			// Level balance--calculate directly from stats rather than using some silly lookup table
 			const mbstmin = 1307; // Sunkern has the lowest modified base stat total, and that total is 807
@@ -415,15 +414,15 @@ export class RandomTeams {
 				name: species.baseSpecies,
 				species: species.name,
 				gender: species.gender,
-				item: item,
-				ability: ability,
-				moves: moves,
-				evs: evs,
-				ivs: ivs,
-				nature: nature,
+				item,
+				ability,
+				moves,
+				evs,
+				ivs,
+				nature,
 				level,
-				happiness: happiness,
-				shiny: shiny,
+				happiness,
+				shiny,
 			});
 		}
 
@@ -442,14 +441,11 @@ export class RandomTeams {
 		}
 
 		const pool: number[] = [];
-		for (const id in this.dex.data.FormatsData) {
-			if (
-				!this.dex.data.Pokedex[id] ||
-				(this.dex.data.FormatsData[id].isNonstandard && this.dex.data.FormatsData[id].isNonstandard !== 'Unobtainable')
-			) continue;
-			if (requiredType && !this.dex.data.Pokedex[id].types.includes(requiredType)) continue;
-			if (minSourceGen && (this.dex.data.Pokedex[id].gen || 8) < minSourceGen) continue;
-			const num = this.dex.data.Pokedex[id].num;
+		for (const species of this.dex.species.all()) {
+			if (!species.exists || (species.isNonstandard && species.isNonstandard !== 'Unobtainable')) continue;
+			if (requiredType && !species.types.includes(requiredType)) continue;
+			if (minSourceGen && species.gen < minSourceGen) continue;
+			const num = species.num;
 			if (num <= 0 || pool.includes(num)) continue;
 			if (num > last) break;
 			pool.push(num);
@@ -462,9 +458,8 @@ export class RandomTeams {
 		}
 
 		const formes: string[][] = [];
-		for (const id in this.dex.data.Pokedex) {
-			if (!(this.dex.data.Pokedex[id].num in hasDexNumber)) continue;
-			const species = this.dex.species.get(id);
+		for (const species of this.dex.species.all()) {
+			if (!(species.num in hasDexNumber)) continue;
 			if (species.gen <= this.gen && (!species.isNonstandard || species.isNonstandard === 'Unobtainable')) {
 				if (!formes[hasDexNumber[species.num]]) formes[hasDexNumber[species.num]] = [];
 				formes[hasDexNumber[species.num]].push(species.name);
@@ -484,10 +479,10 @@ export class RandomTeams {
 	randomHCTeam(): PokemonSet[] {
 		const team = [];
 
-		const itemPool = Object.keys(this.dex.data.Items);
-		const abilityPool = Object.keys(this.dex.data.Abilities);
-		const movePool = Object.keys(this.dex.data.Moves);
-		const naturePool = Object.keys(this.dex.data.Natures);
+		const itemPool = [...this.dex.items.all()];
+		const abilityPool = [...this.dex.abilities.all()];
+		const movePool = [...this.dex.moves.all()];
+		const naturePool = [...this.dex.natures.all()];
 
 		const randomN = this.randomNPokemon(this.maxTeamSize, this.forceMonotype);
 
@@ -499,27 +494,26 @@ export class RandomTeams {
 			let item = '';
 			if (this.gen >= 2) {
 				do {
-					item = this.sampleNoReplace(itemPool);
-				} while (this.dex.items.get(item).gen > this.gen || this.dex.data.Items[item].isNonstandard);
+					item = this.sampleNoReplace(itemPool).id;
+				} while (this.dex.items.get(item).gen > this.gen || this.dex.items.get(item).isNonstandard);
 			}
 
 			// Random unique ability
-			let ability = 'None';
+			let ability = 'No Ability';
 			if (this.gen >= 3) {
 				do {
-					ability = this.sampleNoReplace(abilityPool);
-				} while (this.dex.abilities.get(ability).gen > this.gen || this.dex.data.Abilities[ability].isNonstandard);
+					ability = this.sampleNoReplace(abilityPool).name;
+				} while (this.dex.abilities.get(ability).gen > this.gen || this.dex.abilities.get(ability).isNonstandard);
 			}
 
 			// Random unique moves
-			const m = [];
+			const moves = [];
 			do {
-				const moveid = this.sampleNoReplace(movePool);
-				const move = this.dex.moves.get(moveid);
+				const move = this.sampleNoReplace(movePool);
 				if (move.gen <= this.gen && !move.isNonstandard && !move.name.startsWith('Hidden Power ')) {
-					m.push(moveid);
+					moves.push(move.id);
 				}
-			} while (m.length < 4);
+			} while (moves.length < 4);
 
 			// Random EVs
 			const evs = {hp: 0, atk: 0, def: 0, spa: 0, spd: 0, spe: 0};
@@ -548,7 +542,7 @@ export class RandomTeams {
 			};
 
 			// Random nature
-			const nature = this.sample(naturePool);
+			const nature = this.sample(naturePool).name;
 
 			// Level balance
 			const mbstmin = 1307;
@@ -581,15 +575,15 @@ export class RandomTeams {
 				name: species.baseSpecies,
 				species: species.name,
 				gender: species.gender,
-				item: item,
-				ability: ability,
-				moves: m,
-				evs: evs,
-				ivs: ivs,
-				nature: nature,
+				item,
+				ability,
+				moves,
+				evs,
+				ivs,
+				nature,
 				level,
-				happiness: happiness,
-				shiny: shiny,
+				happiness,
+				shiny,
 			});
 		}
 
@@ -1653,21 +1647,21 @@ export class RandomTeams {
 			(isDoubles && species.randomDoubleBattleMoves) ||
 			(isNoDynamax && species.randomBattleNoDynamaxMoves) ||
 			species.randomBattleMoves;
-		const movePool = (randMoves || Object.keys(this.dex.data.Learnsets[species.id]!.learnset!)).slice();
+		const movePool: ID[] = (randMoves || Object.keys(this.dex.data.Learnsets[species.id]!.learnset!) as ID[]).slice();
 		if (this.format.gameType === 'multi' || this.format.gameType === 'freeforall') {
 			// Random Multi Battle uses doubles move pools, but Ally Switch fails in multi battles
 			// Random Free-For-All also uses doubles move pools, for now
-			const allySwitch = movePool.indexOf('allyswitch');
+			const allySwitch = movePool.indexOf('allyswitch' as ID);
 			if (allySwitch > -1) {
 				if (movePool.length > 4) {
 					this.fastPop(movePool, allySwitch);
 				} else {
 					// Ideally, we'll never get here, but better to have a move that usually does nothing than one that always does
-					movePool[allySwitch] = 'sleeptalk';
+					movePool[allySwitch] = 'sleeptalk' as ID;
 				}
 			}
 		}
-		const rejectedPool = [];
+		const rejectedPool: ID[] = [];
 		const moves: ID[] = [];
 		let ability = '';
 		let item = undefined;
@@ -1782,7 +1776,7 @@ export class RandomTeams {
 
 				// Sleep Talk shouldn't be selected without Rest
 				if (move.id === 'rest' && cull) {
-					const sleeptalk = movePool.indexOf('sleeptalk');
+					const sleeptalk = movePool.indexOf('sleeptalk' as ID);
 					if (sleeptalk >= 0) {
 						if (movePool.length < 2) {
 							cull = false;
@@ -2003,8 +1997,7 @@ export class RandomTeams {
 	) {
 		const exclude = pokemonToExclude.map(p => toID(p.species));
 		const pokemonPool = [];
-		for (const id in this.dex.data.FormatsData) {
-			let species = this.dex.species.get(id);
+		for (let species of this.dex.species.all()) {
 			if (species.gen > this.gen || exclude.includes(species.id)) continue;
 			if (isMonotype) {
 				if (!species.types.includes(type)) continue;
@@ -2013,7 +2006,7 @@ export class RandomTeams {
 					if (!species.types.includes(type)) continue;
 				}
 			}
-			pokemonPool.push(id);
+			pokemonPool.push(species.id);
 		}
 		return pokemonPool;
 	}

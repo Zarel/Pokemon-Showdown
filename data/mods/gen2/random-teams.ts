@@ -302,7 +302,7 @@ export class RandomGen2Teams extends RandomGen3Teams {
 			name: species.name,
 			species: species.name,
 			moves: moves,
-			ability: 'None',
+			ability: 'No Ability',
 			evs: {hp: 255, atk: 255, def: 255, spa: 255, spd: 255, spe: 255},
 			ivs,
 			item: this.getItem('None', hasType, hasMove, species),
