@@ -1311,6 +1311,9 @@ export class GlobalRoomState {
 			const ruleTable = Dex.formats.getRuleTable(format);
 			const level = ruleTable.adjustLevel || ruleTable.adjustLevelDown || ruleTable.maxLevel;
 			if (level === 50) displayCode |= 16;
+			if (format.gameType === 'multi') {
+				displayCode |= 32;
+			}
 			this.formatList += ',' + displayCode.toString(16);
 		}
 		return this.formatList;

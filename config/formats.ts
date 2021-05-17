@@ -63,7 +63,6 @@ export const Formats: FormatList = [
 		mod: 'gen8',
 		team: 'random',
 		gameType: 'multi',
-		searchShow: false,
 		tournamentShow: false,
 		rated: false,
 		ruleset: [

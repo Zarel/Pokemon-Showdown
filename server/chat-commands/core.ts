@@ -1604,6 +1604,58 @@ export const commands: Chat.ChatCommands = {
 		}
 	},
 
+	requestpartner(target, room, user) {
+		const {targetUser, rest} = this.requireUser(target);
+		if (targetUser.locked && !user.locked) {
+			return this.popupReply(`That user is locked and cannot be invited to battles.`);
+		}
+		if (user.locked && !targetUser.locked) {
+			return this.errorReply(`You are locked and cannot invite others to battles.`);
+		}
+		const format = Dex.formats.get(rest);
+		if (!format.exists) return this.popupReply(`Invalid format: ${rest}`);
+		if (format.gameType !== 'multi') {
+			return this.popupReply(`You cannot invite people to non-multibattle formats. Challenge them instead.`);
+		}
+
+		let requestMap = Ladders.requests.get(targetUser.id);
+		if (!requestMap) {
+			requestMap = new Map();
+			Ladders.requests.set(targetUser.id, requestMap);
+		}
+		requestMap.set(user.id, format.id);
+		targetUser.send(`|requestmulti|${user.name}|${format.id}`);
+		this.connection.send(
+			`|pm|${user.getIdentity()}|${targetUser.getIdentity()}|/text ` +
+			`You invited ${targetUser.name} to join you in ${format.name}.`
+		);
+	},
+	async acceptpartner(target, room, user, connection) {
+		const {targetUser} = this.requireUser(target);
+		const reqs = Ladders.requests.get(user.id);
+		if (!reqs) return this.popupReply(`You have no battle requests pending.`);
+		const formatid = reqs.get(targetUser.id);
+		if (!formatid) return this.popupReply(`You have no request pending from that user.`);
+		const format = Dex.formats.get(formatid);
+		const search = await Ladders(formatid).prepBattle(connection, 'rated', user.battleSettings.team, !!format.rated, true);
+		if (search === null) return null;
+		targetUser.battleSettings.teammate = search;
+		targetUser.chat(`/search ${formatid}`, null, targetUser.connections[0]);
+		targetUser.popup(`Your teammate has accepted, and a battle search has been started.`);
+	},
+	denypartner(target, room, user) {
+		const {targetUser} = this.requireUser(target);
+		const reqs = Ladders.requests.get(user.id);
+		if (!reqs) return this.popupReply(`You have no pending teammate requests.`);
+		if (!reqs.has(targetUser.id)) {
+			return this.popupReply(`That user has not sent you a teammate request.`);
+		}
+		reqs.delete(targetUser.id);
+		if (!reqs.size) Ladders.requests.delete(user.id);
+		this.popupReply(`Request denied.`);
+		targetUser.popup(`${user.id} denied your teammate request.`);
+	},
+
 	chall: 'challenge',
 	challenge(target, room, user, connection) {
 		const {targetUser, targetUsername, rest: formatName} = this.splitUser(target);
