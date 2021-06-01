@@ -34,6 +34,7 @@ export const get = TeamValidatorAsync.get;
  *********************************************************/
 
 import {QueryProcessManager} from '../lib/process-manager';
+import {Repl} from '../lib';
 
 export const PM = new QueryProcessManager<{
 	formatid: string, options?: {removeNicknames?: boolean}, team: string,
@@ -92,7 +93,7 @@ if (!PM.isParentProcess) {
 	global.Teams = require('../sim/teams').Teams;
 
 	// eslint-disable-next-line no-eval
-	require('../lib/repl').Repl.start(`team-validator-${process.pid}`, (cmd: string) => eval(cmd));
+	Repl.start(`team-validator-${process.pid}`, (cmd: string) => eval(cmd));
 } else {
 	PM.spawn(global.Config ? Config.validatorprocesses : 1);
 }

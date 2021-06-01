@@ -6,15 +6,13 @@
  * @author mia-pi-git
  */
 
-import {QueryProcessManager} from '../../lib/process-manager';
 import {FS, Utils} from '../../lib/';
 import {Config} from '../config-loader';
-import {Repl} from '../../lib/repl';
 import {linkRegex} from '../chat-formatter';
 
 const PATH = "config/chat-plugins/net.json";
-const NUM_PROCESSES = Config.netfilterprocesses || 1;
-const PM_TIMEOUT = 2 * 60 * 60 * 1000; // training can be _really_ slow
+
+export const queryTimeout = 2 * 60 * 60 * 1000; // training can be _really_ slow
 const WHITELIST = ["mia"];
 
 interface NetQuery {
@@ -116,10 +114,10 @@ export class NeuralNetChecker {
 	}
 	static async train(data: TrainingLine[]) {
 		// do the training in its own process
-		const result = await PM.queryTemporaryProcess({type: 'train', data});
+		const result = await Chat.PM.queryTemporaryProcess({query: {type: 'train', data}, plugin: 'net-filters'});
 		// load it into the main process that we're querying
-		for (const sub of PM.processes) {
-			await sub.query({type: 'load', data: PATH});
+		for (const sub of Chat.PM.processes) {
+			await sub.query({query: {type: 'load', data: PATH}, plugin: 'net-filters'});
 		}
 		return result;
 	}
@@ -150,7 +148,7 @@ export const chatfilter: Chat.ChatFilter = function (message, user, room, connec
 	// not awaited as so to not hold up the filters (additionally we can wait on this)
 	void (async () => {
 		if (!room || room.persist || room.roomid.startsWith('help-')) return;
-		const result = await PM.query({type: "run", data: message});
+		const result = await Chat.query({type: "run", data: message}, __filename);
 		if (result?.endsWith("|flag")) {
 			if (!hits[room.roomid]) hits[room.roomid] = {};
 			if (!hits[room.roomid][user.id]) hits[room.roomid][user.id] = 0;
@@ -170,9 +168,9 @@ export const chatfilter: Chat.ChatFilter = function (message, user, room, connec
 	return undefined;
 };
 
-export const PM = new QueryProcessManager<NetQuery, any>(module, async query => {
+export const query: Chat.PMQueryHandler<NetQuery, any> = async request => {
 	if (!net) throw new Error("Neural net not intialized");
-	const {data, type, options} = query;
+	const {data, type, options} = request;
 	switch (type) {
 	case 'run':
 		let response = '';
@@ -198,29 +196,14 @@ export const PM = new QueryProcessManager<NetQuery, any>(module, async query => 
 		const time = await net.train(lines);
 		return [time, lines.length];
 	}
-}, PM_TIMEOUT);
+};
 
-if (!PM.isParentProcess) {
-	global.Config = Config;
-
-	global.Monitor = {
-		crashlog(error: Error, source = 'A netfilter process', details: AnyObject | null = null) {
-			const repr = JSON.stringify([error.name, error.message, source, details]);
-			process.send!(`THROW\n@!!@${repr}\n${error.stack}`);
-		},
-	};
-	process.on('uncaughtException', err => {
-		if (Config.crashguard) {
-			Monitor.crashlog(err, 'A net filter child process');
-		}
-	});
+export function onSubprocessStart() {
 	// we only want to spawn one network, when it's the subprocess
 	// otherwise, we use the PM for interfacing with the network
 	net = new NeuralNetChecker(PATH);
 	// eslint-disable-next-line no-eval
-	Repl.start('netfilters', cmd => eval(cmd));
-} else {
-	PM.spawn(NUM_PROCESSES);
+	Chat.addRepl('netfilters', cmd => eval(cmd));
 }
 
 export const commands: Chat.ChatCommands = {
@@ -266,7 +249,7 @@ export const commands: Chat.ChatCommands = {
 			const backup = FS(PATH + '.backup');
 			if (!backup.existsSync()) return this.errorReply(`No backup exists.`);
 			await backup.copyFile(PATH);
-			const result = await PM.query({type: "load", data: PATH});
+			const result = await Chat.query({type: "load", data: PATH}, __filename);
 			if (result && result !== 'success') {
 				return this.errorReply(`Rollback failed: ${result}`);
 			}
@@ -274,7 +257,7 @@ export const commands: Chat.ChatCommands = {
 		},
 		async test(target, room, user) {
 			checkAllowed(this);
-			const result = await PM.query({type: 'run', data: target});
+			const result = await Chat.query({type: 'run', data: target}, __filename);
 			return this.sendReply(`Result for '${target}': ${result}`);
 		},
 		enable: 'disable',
@@ -310,7 +293,7 @@ export const commands: Chat.ChatCommands = {
 			const targetPath = FS(`logs/chat/${roomid}/${date.slice(0, -3)}/${date}.txt`);
 			if (!targetPath.existsSync()) return this.errorReply(`Logs for that date not found`);
 			this.sendReply(`Initating training...`);
-			const response = await PM.query({data: {path: targetPath.path, result}, type: 'trainfrom'});
+			const response = await Chat.query({data: {path: targetPath.path, result}, type: 'trainfrom'}, __filename);
 			this.sendReply(`Training completed in ${Chat.toDurationString(response[0])}`);
 			this.privateGlobalModAction(
 				`${user.name} trained the net filters on logs from ${roomid} (${date} - ${Chat.count(response[1], 'lines')})`

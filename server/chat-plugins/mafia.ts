@@ -100,8 +100,8 @@ const VALID_IMAGES = [
 let MafiaData: MafiaData = Object.create(null);
 let logs: MafiaLog = {leaderboard: {}, mvps: {}, hosts: {}, plays: {}, leavers: {}};
 
-Punishments.addRoomPunishmentType('MAFIAGAMEBAN', 'banned from playing mafia games');
-Punishments.addRoomPunishmentType('MAFIAHOSTBAN', 'banned from hosting mafia games');
+global.Punishments?.addRoomPunishmentType('MAFIAGAMEBAN', 'banned from playing mafia games');
+global.Punishments?.addRoomPunishmentType('MAFIAHOSTBAN', 'banned from hosting mafia games');
 
 const hostQueue: ID[] = [];
 

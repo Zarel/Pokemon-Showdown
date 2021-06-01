@@ -24,6 +24,7 @@ namespace Chat {
 	export type PunishmentFilter = import('./chat').PunishmentFilter;
 	export type FilterWord = import('./chat').FilterWord;
 	export type CRQHandler = import('./chat').CRQHandler;
+	export type PMQueryHandler<T, U> = import('./chat').PMQueryHandler<T, U>;
 	export type AnnotatedChatCommands = import('./chat').AnnotatedChatCommands;
 	export type AnnotatedChatHandler = import('./chat').AnnotatedChatHandler;
 	export type Handlers = import('./chat').Handlers;

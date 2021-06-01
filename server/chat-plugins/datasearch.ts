@@ -8,7 +8,7 @@
  * @license MIT
  */
 
-import {ProcessManager, Utils} from '../../lib';
+import {Utils} from '../../lib';
 import {TeamValidator} from '../../sim/team-validator';
 
 interface DexOrGroup {
@@ -48,7 +48,6 @@ interface MoveOrGroup {
 
 type Direction = 'less' | 'greater' | 'equal';
 
-const MAX_PROCESSES = 1;
 const RESULTS_MAX_LENGTH = 10;
 const MAX_RANDOM_RESULTS = 30;
 const dexesHelp = Object.keys((global.Dex?.dexes || {})).filter(x => x !== 'sourceMaps').join('</code>, <code>');
@@ -2502,66 +2501,46 @@ function runLearn(target: string, cmd: string, canAll: boolean, formatid: string
 }
 
 function runSearch(query: {target: string, cmd: string, canAll: boolean, message: string}) {
-	return PM.query(query);
+	return Chat.query(query, __filename);
 }
 
 /*********************************************************
  * Process manager
  *********************************************************/
 
-export const PM = new ProcessManager.QueryProcessManager<AnyObject, AnyObject>(module, query => {
+export const query: Chat.PMQueryHandler<AnyObject, AnyObject> = request => {
 	try {
 		if (Config.debugdexsearchprocesses && process.send) {
-			process.send('DEBUG\n' + JSON.stringify(query));
+			process.send('DEBUG\n' + JSON.stringify(request));
 		}
-		switch (query.cmd) {
+		switch (request.cmd) {
 		case 'randpoke':
 		case 'dexsearch':
-			return runDexsearch(query.target, query.cmd, query.canAll, query.message, false);
+			return runDexsearch(request.target, request.cmd, request.canAll, request.message, false);
 		case 'randmove':
 		case 'movesearch':
-			return runMovesearch(query.target, query.cmd, query.canAll, query.message, false);
+			return runMovesearch(request.target, request.cmd, request.canAll, request.message, false);
 		case 'itemsearch':
-			return runItemsearch(query.target, query.cmd, query.canAll, query.message);
+			return runItemsearch(request.target, request.cmd, request.canAll, request.message);
 		case 'abilitysearch':
-			return runAbilitysearch(query.target, query.cmd, query.canAll, query.message);
+			return runAbilitysearch(request.target, request.cmd, request.canAll, request.message);
 		case 'learn':
-			return runLearn(query.target, query.cmd, query.canAll, query.message);
+			return runLearn(request.target, request.cmd, request.canAll, request.message);
 		default:
-			throw new Error(`Unrecognized Dexsearch command "${query.cmd}"`);
+			throw new Error(`Unrecognized Dexsearch command "${request.cmd}"`);
 		}
 	} catch (err) {
-		Monitor.crashlog(err, 'A search query', query);
+		Monitor.crashlog(err, 'A search query', request);
 	}
 	return {
-		error: "Sorry! Our search engine crashed on your query. We've been automatically notified and will fix this crash.",
+		error: "Sorry! Our search engine crashed on your request. We've been automatically notified and will fix this crash.",
 	};
-});
+};
 
-if (!PM.isParentProcess) {
-	// This is a child process!
-	global.Config = require('../config-loader').Config;
-	global.Monitor = {
-		crashlog(error: Error, source = 'A datasearch process', details: AnyObject | null = null) {
-			const repr = JSON.stringify([error.name, error.message, source, details]);
-			process.send!(`THROW\n@!!@${repr}\n${error.stack}`);
-		},
-	};
-	if (Config.crashguard) {
-		process.on('uncaughtException', err => {
-			Monitor.crashlog(err, 'A dexsearch process');
-		});
-	}
-
-	global.Dex = require('../../sim/dex').Dex;
-	global.Chat = require('../chat').Chat;
-	global.toID = Dex.toID;
+export function onSubprocessStart() {
 	Dex.includeData();
-
 	// @ts-ignore
-	require('../../lib/repl').Repl.start('dexsearch', cmd => eval(cmd)); // eslint-disable-line no-eval
-} else {
-	PM.spawn(MAX_PROCESSES);
+	Chat.addRepl('dexsearch', cmd => eval(cmd)); // eslint-disable-line no-eval
 }
 
 export const testables = {

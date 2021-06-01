@@ -1,11 +1,11 @@
 /**
  * Battle search - handles searching battle logs.
  */
-import {FS, Utils, ProcessManager, Repl} from '../../lib';
+import {FS, Utils, ProcessManager} from '../../lib';
 
 import {checkRipgrepAvailability} from '../config-loader';
 
-const BATTLESEARCH_PROCESS_TIMEOUT = 3 * 60 * 60 * 1000; // 3 hours
+export const queryTimeout = 3 * 60 * 60 * 1000; // 3 hours
 
 interface BattleOutcome {
 	lost: string;
@@ -23,7 +23,6 @@ interface BattleSearchResults {
 	timesBattled: {[k: string]: number};
 }
 
-const MAX_BATTLESEARCH_PROCESSES = 1;
 export async function runBattleSearch(userids: ID[], month: string, tierid: ID, turnLimit?: number) {
 	const useRipgrep = await checkRipgrepAvailability();
 	const pathString = `logs/${month}/${tierid}/`;
@@ -238,7 +237,7 @@ async function getBattleSearch(
 	const user = connection.user;
 	if (!user.can('forcewin')) return connection.popup(`/battlesearch - Access Denied`);
 
-	const response = await PM.query({userids, turnLimit, month, tierid});
+	const response = await Chat.query({userids, turnLimit, month, tierid}, __filename);
 	connection.send(buildResults(response, userids as ID[], month, tierid, turnLimit));
 }
 
@@ -357,7 +356,7 @@ export const commands: Chat.ChatCommands = {
  * Process manager
  *********************************************************/
 
-export const PM = new ProcessManager.QueryProcessManager<AnyObject, AnyObject>(module, async data => {
+export const query: Chat.PMQueryHandler<AnyObject, AnyObject> = async data => {
 	const {userids, turnLimit, month, tierid} = data;
 	const start = Date.now();
 	try {
@@ -376,33 +375,9 @@ export const PM = new ProcessManager.QueryProcessManager<AnyObject, AnyObject>(m
 		});
 	}
 	return null;
-}, BATTLESEARCH_PROCESS_TIMEOUT, message => {
-	if (message.startsWith('SLOW\n')) {
-		Monitor.slow(message.slice(5));
-	}
-});
+};
 
-if (!PM.isParentProcess) {
-	// This is a child process!
-	global.Config = require('../config-loader').Config;
-	global.Monitor = {
-		crashlog(error: Error, source = 'A battle search process', details: AnyObject | null = null) {
-			const repr = JSON.stringify([error.name, error.message, source, details]);
-			process.send!(`THROW\n@!!@${repr}\n${error.stack}`);
-		},
-		slow(text: string) {
-			process.send!(`CALLBACK\nSLOW\n${text}`);
-		},
-	};
-	process.on('uncaughtException', err => {
-		if (Config.crashguard) {
-			Monitor.crashlog(err, 'A battle search child process');
-		}
-	});
-	global.Dex = require('../../sim/dex').Dex;
-	global.toID = Dex.toID;
+export function onSubprocessStart() {
 	// eslint-disable-next-line no-eval
-	Repl.start('battlesearch', cmd => eval(cmd));
-} else {
-	PM.spawn(MAX_BATTLESEARCH_PROCESSES);
+	Chat.addRepl('battlesearch', cmd => eval(cmd));
 }

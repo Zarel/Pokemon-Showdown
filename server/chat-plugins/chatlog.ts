@@ -5,18 +5,14 @@
  * @license MIT
  */
 
-import {Utils, FS, Dashycode, ProcessManager, Repl} from '../../lib';
-import {Config} from '../config-loader';
-import {Dex} from '../../sim/dex';
-import {Chat} from '../chat';
+import {Utils, FS, Dashycode, ProcessManager} from '../../lib';
 
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_RESULTS = 3000;
 const MAX_MEMORY = 67108864; // 64MB
-const MAX_PROCESSES = 1;
 const MAX_TOPUSERS = 100;
 
-const CHATLOG_PM_TIMEOUT = 1 * 60 * 60 * 1000; // 1 hour
+export const queryTimeout = 1 * 60 * 60 * 1000; // 1 hour
 
 const UPPER_STAFF_ROOMS = ['upperstaff', 'adminlog', 'slowlog'];
 
@@ -332,9 +328,9 @@ export const LogViewer = new class {
 		}
 		const roomid = `battle-${tier}-${number}` as RoomID;
 		context.setHTML(`<div class="pad"><h2>Locating battle logs for the battle ${tier}-${number}...</h2></div>`);
-		const log = await PM.query({
+		const log = await Chat.query({
 			queryType: 'battlesearch', roomid: toID(tier), search: number,
-		});
+		}, __filename);
 		if (!log) return context.setHTML(this.error("Logs not found."));
 		const {connection} = context;
 		context.close();
@@ -603,21 +599,21 @@ export abstract class Searcher {
 			(date ? date !== 'all' ? `, on the date "${date}"` : ', on all dates' : '') +
 			`.</h2></div>`
 		);
-		const response = await PM.query({search, roomid, date, limit, queryType: 'search'});
+		const response = await Chat.query({search, roomid, date, limit, queryType: 'search'}, __filename);
 		return context.setHTML(response);
 	}
 	async runLinecountSearch(context: Chat.PageContext, roomid: RoomID, month: string, user?: ID) {
 		context.setHTML(
 			`<div class="pad"><h2>Searching linecounts on room ${roomid}${user ? ` for the user ${user}` : ''}.</h2></div>`
 		);
-		const results = await PM.query({roomid, date: month, search: user, queryType: 'linecount'});
+		const results = await Chat.query({roomid, date: month, search: user, queryType: 'linecount'}, __filename);
 		context.setHTML(results);
 	}
 	async sharedBattles(userids: string[]) {
 		let buf = `Logged shared battles between the users ${userids.join(', ')}`;
-		const results: string[] = await PM.query({
+		const results: string[] = await Chat.query({
 			queryType: 'sharedsearch', search: userids,
-		});
+		}, __filename);
 		if (!results.length) {
 			buf += `:<br />None found.`;
 			return buf;
@@ -1025,7 +1021,7 @@ export class RipgrepLogSearcher extends Searcher {
 
 export const LogSearcher: Searcher = new (Config.chatlogreader === 'ripgrep' ? RipgrepLogSearcher : FSLogSearcher)();
 
-export const PM = new ProcessManager.QueryProcessManager<AnyObject, any>(module, async data => {
+export const query: Chat.PMQueryHandler<AnyObject, any> = async data => {
 	const start = Date.now();
 	try {
 		let result: any;
@@ -1058,38 +1054,12 @@ export const PM = new ProcessManager.QueryProcessManager<AnyObject, any>(module,
 		Monitor.crashlog(e, 'A chatlog search query', data);
 		return LogViewer.error(`Sorry! Your chatlog search crashed. We've been notified and will fix this.`);
 	}
-}, CHATLOG_PM_TIMEOUT, message => {
-	if (message.startsWith(`SLOW\n`)) {
-		Monitor.slow(message.slice(5));
-	}
-});
+};
 
-if (!PM.isParentProcess) {
-	// This is a child process!
-	global.Config = Config;
-	global.Monitor = {
-		crashlog(error: Error, source = 'A chatlog search process', details: AnyObject | null = null) {
-			const repr = JSON.stringify([error.name, error.message, source, details]);
-			process.send!(`THROW\n@!!@${repr}\n${error.stack}`);
-		},
-		slow(text: string) {
-			process.send!(`CALLBACK\nSLOW\n${text}`);
-		},
-	};
-	global.Dex = Dex;
-	global.toID = Dex.toID;
-	global.Chat = Chat;
-	process.on('uncaughtException', err => {
-		if (Config.crashguard) {
-			Monitor.crashlog(err, 'A chatlog search child process');
-		}
-	});
+export function onSubprocessStart() {
 	// eslint-disable-next-line no-eval
-	Repl.start('chatlog', cmd => eval(cmd));
-} else {
-	PM.spawn(MAX_PROCESSES);
+	Chat.addRepl('chatlog', cmd => eval(cmd));
 }
-
 const accessLog = FS(`logs/chatlog-access.txt`).createAppendStream();
 
 export const pages: Chat.PageTable = {
@@ -1202,9 +1172,9 @@ export const pages: Chat.PageTable = {
 		void accessLog.writeLine(`${user.id}: battle-${tier}-${num}`);
 		return LogViewer.battle(tier, num, this);
 	},
-	async logsaccess(query) {
+	async logsaccess(args) {
 		this.checkCan('rangeban');
-		const type = toID(query.shift());
+		const type = toID(args.shift());
 		if (type && !['chat', 'battle', 'all', 'battles'].includes(type)) {
 			return this.errorReply(`Invalid log type.`);
 		}
@@ -1220,7 +1190,7 @@ export const pages: Chat.PageTable = {
 			title = 'Logs access log';
 			break;
 		}
-		const userid = toID(query.shift());
+		const userid = toID(args.shift());
 		let buf = `<div class="pad"><h2>${title}`;
 		if (userid) buf += ` for ${userid}`;
 		buf += `</h2><hr /><ol>`;

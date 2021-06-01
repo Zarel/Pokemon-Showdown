@@ -11,7 +11,7 @@ const REPLAY_REGEX = new RegExp(
 	`${Utils.escapeRegex(Config.routes.replays)}/(?:[a-z0-9]-)?(?:[a-z0-9]+)-(?:[0-9]+)(?:-[a-z0-9]+pw)?`, "g"
 );
 
-Punishments.addRoomPunishmentType('TICKETBAN', 'banned from creating help tickets');
+global.Punishments?.addRoomPunishmentType('TICKETBAN', 'banned from creating help tickets');
 
 interface TicketState {
 	creator: string;
@@ -399,7 +399,7 @@ export class HelpTicket extends Rooms.RoomGame {
 	onChatMessage(message: string, user: User) {
 		HelpTicket.uploadReplaysFrom(message, user, user.connections[0]);
 	}
-	static modlogStream = Rooms.Modlog.initialize('help-texttickets' as ModlogID);
+	static modlogStream = global.Rooms?.Modlog.initialize('help-texttickets' as ModlogID);
 	// workaround to modlog for no room
 	static modlog(entry: PartialModlogEntry) {
 		Rooms.Modlog.write('help-texttickets' as ModlogID, entry);

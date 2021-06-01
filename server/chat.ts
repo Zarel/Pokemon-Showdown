@@ -86,6 +86,8 @@ export type SettingsHandler = (
 export type CRQHandler = (this: CommandContext, target: string, user: User, trustable?: boolean) => any;
 export type RoomCloseHandler = (id: string, user: User, connection: Connection, page: boolean) => any;
 
+export type PMQueryHandler<T = any, U = any> = ((this: typeof Chat, query: T) => Promise<U> | U) & {timeout?: number};
+
 /**
  * Chat filters can choose to:
  * 1. return false OR null - to not send a user's message
@@ -129,7 +131,7 @@ const MAX_PARSE_RECURSION = 10;
 const VALID_COMMAND_TOKENS = '/!';
 const BROADCAST_TOKEN = '!';
 
-import {FS, Utils} from '../lib';
+import {FS, Utils, ProcessManager, Repl} from '../lib';
 import {formatText, linkRegex, stripFormatting} from './chat-formatter';
 
 // @ts-ignore no typedef available
@@ -1415,12 +1417,27 @@ export class CommandContext extends MessageContext {
 	}
 }
 
-export const Chat = new class {
-	constructor() {
-		void this.loadTranslations().then(() => {
-			Chat.translationsLoaded = true;
-		});
+export const PM = new ProcessManager.QueryProcessManager<any, any>(module, async request => {
+	const {plugin, query} = request;
+	const funct = Chat.queryFunctions[plugin];
+	if (!funct) throw new Error(`Missing query function for plugin ${plugin}`);
+	let timeout = null;
+	if (funct.timeout) {
+		timeout = setTimeout(() => {
+			console.log(`Slow query:\n`, request);
+			throw new Error(`Chat PM query timeout`);
+		}, funct.timeout);
 	}
+	const req = await funct.call(Chat, query);
+	if (timeout) clearTimeout(timeout);
+	return req;
+}, 12 * 60 * 60 * 1000, message => {
+	if (message.startsWith('SLOW\n')) {
+		Monitor.slow(message.slice(5));
+	}
+});
+
+export const Chat = new class {
 	translationsLoaded = false;
 	/**
 	 * As per the node.js documentation at https://nodejs.org/api/timers.html#timers_settimeout_callback_delay_args,
@@ -1750,6 +1767,17 @@ export const Chat = new class {
 
 		Monitor.slow(logMessage);
 	}
+	readonly PM = PM;
+	readonly queryFunctions: {[k: string]: PMQueryHandler} = {};
+	readonly subprocessStartHandlers: (() => any)[] = [];
+	readonly repls: {[plugin: string]: (cmd: string) => any} = {};
+	query(query: any, file: string) {
+		const plugin = this.getPluginName(file);
+		return PM.query({query, plugin});
+	}
+	addRepl(name: string, cb: (cmd: string) => any) {
+		this.repls[name] = cb;
+	}
 	sendPM(message: string, user: User, pmTarget: User, onlyRecipient: User | null = null) {
 		const buf = `|pm|${user.getIdentity()}|${pmTarget.getIdentity()}|${message}`;
 		if (onlyRecipient) return onlyRecipient.send(buf);
@@ -1771,7 +1799,11 @@ export const Chat = new class {
 		} else {
 			return;
 		}
-		this.loadPluginData(plugin, file.split('/').pop()?.slice(0, -3) || file);
+		this.loadPluginData(plugin, this.getPluginName(file));
+	}
+	getPluginName(file: string) {
+		if (this.plugins[file]) return file;
+		return file.split('/').pop()?.slice(0, -3) || file;
 	}
 	annotateCommands(commandTable: AnyObject, namespace = ''): AnnotatedChatCommands {
 		for (const cmd in commandTable) {
@@ -1815,6 +1847,12 @@ export const Chat = new class {
 		return commandTable;
 	}
 	loadPluginData(plugin: AnyObject, name: string) {
+		if (!PM.isParentProcess) {
+			// we dont want anything other than query functions, as they're just a huge memory waste
+			if (plugin.query) Chat.queryFunctions[name] = Object.assign(plugin.query, {timeout: plugin.queryTimeout});
+			if (plugin.onSubprocessStart) Chat.subprocessStartHandlers.push(plugin.onSubprocessStart);
+			return;
+		}
 		if (plugin.commands) {
 			Object.assign(Chat.commands, this.annotateCommands(plugin.commands));
 		}
@@ -2463,4 +2501,55 @@ export interface Monitor {
 	label: string;
 	condition?: string;
 	monitor?: MonitorHandler;
+}
+
+if (!PM.isParentProcess) {
+	const noop = () => {};
+	const proto = class {};
+
+	global.Config = require('./config-loader').load();
+	Config.nofswriting = true; // don't want this, could get weird
+	global.Dex = require('../sim/dex').Dex;
+	global.Chat = Chat;
+	global.toID = Dex.toID;
+
+	// don't actually need these but they do need to be dummied
+	// (easier to fake here rather than update many calls throughout plugins)
+	global.Rooms = {
+		RoomGame: proto, MinorActivity: proto,
+		RoomGamePlayer: proto, rooms: new Map(),
+		get: noop, BasicRoom: proto,
+	};
+	global.Users = {User: proto};
+	global.IPTools = {stringToRange: noop};
+	global.Tournaments = {};
+
+	global.Monitor = {
+		crashlog(error: Error, source = 'A chat plugin process', details: AnyObject | null = null) {
+			const repr = JSON.stringify([error.name, error.message, source, details]);
+			process.send!(`THROW\n@!!@${repr}\n${error.stack}`);
+		},
+		slow(text: string) {
+			process.send!(`CALLBACK\nSLOW\n${text}`);
+		},
+		warn: noop,
+	};
+
+	Chat.loadPlugins();
+
+	process.on('uncaughtException', err => {
+		if (Config.crashguard) {
+			Monitor.crashlog(err, 'A chat plugin child process');
+		}
+	});
+	for (const funct of Chat.subprocessStartHandlers) {
+		funct();
+	}
+	// eslint-disable-next-line no-eval
+	Repl.start(`chat-${process.pid}`, cmd => eval(cmd));
+} else {
+	void Chat.loadTranslations().then(() => {
+		Chat.translationsLoaded = true;
+	});
+	PM.spawn(Config.pluginprocesses || 2);
 }
