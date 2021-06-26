@@ -4,6 +4,7 @@ data/mods/ssb/ @HoeenCoder @KrisXV
 data/random-teams.ts @AnnikaCodes
 data/text/ @Marty-D
 databases/ @monsanto
+server/chat-plugins/chess.ts @mia-pi-git
 server/chat-plugins/hosts.ts @AnnikaCodes
 server/chat-plugins/mafia.ts @HoeenCoder
 server/chat-plugins/net-filters.ts @mia-pi-git
