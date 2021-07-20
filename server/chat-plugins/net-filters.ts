@@ -6,15 +6,16 @@
  * @author mia-pi-git
  */
 
-import {QueryProcessManager} from '../../lib/process-manager';
-import {FS, Utils} from '../../lib/';
+import {FS, Utils, Repl, ProcessManager} from '../../lib/';
 import {Config} from '../config-loader';
-import {Repl} from '../../lib/repl';
 import {linkRegex} from '../chat-formatter';
 
 const PATH = "config/chat-plugins/net.json";
-const NUM_PROCESSES = Config.netfilterprocesses || 1;
-const PM_TIMEOUT = 2 * 60 * 60 * 1000; // training can be _really_ slow
+const NUM_PROCESSES = {
+	training: 1,
+	main: 1,
+};
+const PM_TIMEOUT = 10 * 60 * 60 * 1000; // training can be _really_ slow
 const WHITELIST = ["mia"];
 
 interface NetQuery {
@@ -54,22 +55,15 @@ export class NeuralNetChecker {
 		}
 		if (path) this.load(path);
 	}
-	async train(data: TrainingLine[], iterations?: number) {
+	async train(data: TrainingLine[], options: {iterations?: number} = {}) {
 		// 200 has good perf but is still effective
-		if (!iterations) iterations = 200;
+		if (!options.iterations) options.iterations = 200;
 		const now = Date.now();
-		if (FS(PATH).existsSync()) await FS(PATH).copyFile(PATH + '.backup');
+		try {
+			await FS(PATH).copyFile(PATH + '.backup');
+		} catch (e) {}
 		if (!this.model) throw new Error(`Attempting to train with no model installed`);
-		for (const line of data) {
-			try {
-				this.model.train([line], {iterations});
-			} catch (e) {
-				Monitor.crashlog(e, "a netfilter training process", {
-					line: JSON.stringify(line),
-				});
-				process.exit();
-			}
-		}
+		this.model.train(data, options);
 		this.save();
 		return Date.now() - now; // time data is helpful for training
 	}
@@ -93,11 +87,17 @@ export class NeuralNetChecker {
 		}
 		return this.sanitizeLine(parts[3]);
 	}
+	static async query(opts: NetQuery) {
+		const process = ['trainfrom', 'train'].includes(opts.type) ? PMTraining : PM;
+		if (!process.isParentProcess) throw new Error(`not parent process`);
+		const result = await process.query(opts);
+		if (result?.error) throw new Chat.ErrorMessage(result.error);
+		return result;
+	}
 	save(path = PATH) {
 		if (!this.model) return {};
-		const state = this.model.toJSON();
-		FS(path).writeUpdate(() => JSON.stringify(state));
-		return state;
+		FS(path).writeUpdate(() => JSON.stringify(this.model));
+		return this.model.toJSON();
 	}
 	load(path: string) {
 		if (!FS(path).existsSync()) return;
@@ -116,9 +116,12 @@ export class NeuralNetChecker {
 	}
 	static async train(data: TrainingLine[]) {
 		// do the training in its own process
-		const result = await PM.queryTemporaryProcess({type: 'train', data});
+		const result = await NeuralNetChecker.query({type: 'train', data});
 		// load it into the main process that we're querying
 		for (const sub of PM.processes) {
+			await sub.query({type: 'load', data: PATH});
+		}
+		for (const sub of PMTraining.processes) {
 			await sub.query({type: 'load', data: PATH});
 		}
 		return result;
@@ -135,7 +138,7 @@ function checkAllowed(context: Chat.CommandContext) {
 export let net: NeuralNetChecker | null = null;
 export let disabled = false;
 
-export const hits: {[roomid: string]: {[userid: string]: number}} = (() => {
+export const hits: {[roomid: string]: {[userid: string]: number | true}} = (() => {
 	const cache = Object.create(null);
 	if (global.Chat) {
 		if (Chat.plugins['net-filters']?.hits) {
@@ -145,22 +148,32 @@ export const hits: {[roomid: string]: {[userid: string]: number}} = (() => {
 	return cache;
 })();
 
+function shouldCheck(room: Room | null, message: string) {
+	return (
+		room && !room.persist &&
+		!room.roomid.startsWith('help-') && message.length > 3 &&
+		!Object.values(hits[room.roomid]).some(h => h === true)
+	) ? room : null;
+}
+
 export const chatfilter: Chat.ChatFilter = function (message, user, room, connection) {
 	if (disabled || !modelExists()) return;
 	// not awaited as so to not hold up the filters (additionally we can wait on this)
 	void (async () => {
-		if (!room || room.persist || room.roomid.startsWith('help-')) return;
-		const result = await PM.query({type: "run", data: message});
+		room = shouldCheck(room, message);
+		if (!room) return;
+		const result = await NeuralNetChecker.query({type: "run", data: message});
 		if (result?.endsWith("|flag")) {
 			if (!hits[room.roomid]) hits[room.roomid] = {};
 			if (!hits[room.roomid][user.id]) hits[room.roomid][user.id] = 0;
-			hits[room.roomid][user.id]++;
+			// safe to assert because we ensure in `shouldCheck` that none of these are booleans
+			(hits[room.roomid][user.id] as number)++;
 			const minCount = Config.netfilterlimit || 20;
 			if (hits[room.roomid][user.id] >= minCount) {
-				Rooms.get('upperstaff')?.add(
+				Rooms.get('staff')?.add(
 					`|c|&|/log [ERPMonitor] Suspicious messages detected in <<${room.roomid}>>`
 				).update();
-				hits[room.roomid][user.id] = 0; // so they can't spam messages
+				hits[room.roomid][user.id] = true; // so they can't spam messages
 				if ('uploadReplay' in (room as GameRoom)) {
 					void (room as GameRoom).uploadReplay(user, connection, "silent");
 				}
@@ -170,7 +183,7 @@ export const chatfilter: Chat.ChatFilter = function (message, user, room, connec
 	return undefined;
 };
 
-export const PM = new QueryProcessManager<NetQuery, any>(module, async query => {
+async function handleQuery(query: NetQuery) {
 	if (!net) throw new Error("Neural net not intialized");
 	const {data, type, options} = query;
 	switch (type) {
@@ -181,7 +194,7 @@ export const PM = new QueryProcessManager<NetQuery, any>(module, async query => 
 		} catch (e) {} // uninitialized (usually means intializing, which can be slow) - drop it for now
 		return response;
 	case 'train':
-		return net.train(data as TrainingLine[], options?.iterations);
+		return net.train(data as TrainingLine[], {iterations: options?.iterations});
 	case 'save':
 		return net.save();
 	case 'load':
@@ -192,19 +205,24 @@ export const PM = new QueryProcessManager<NetQuery, any>(module, async query => 
 		}
 		return 'success';
 	case 'trainfrom':
-		const {path: targetPath, result} = data as AnyObject;
-		const content = FS(targetPath).readSync();
+		const {path, result} = data as {path: string, result: string};
+		const content = FS(path).readSync();
 		const lines = NeuralNetChecker.sanitizeChatLines(content, result);
+		const length = lines.length;
 		const time = await net.train(lines);
-		return [time, lines.length];
+		return [time, length];
 	}
-}, PM_TIMEOUT);
+}
+
+const PM = new ProcessManager.QueryProcessManager(module, handleQuery);
+// this one runs longer because training is SLOW
+const PMTraining = new ProcessManager.QueryProcessManager(module, handleQuery, PM_TIMEOUT);
 
 if (!PM.isParentProcess) {
 	global.Config = Config;
 
 	global.Monitor = {
-		crashlog(error: Error, source = 'A netfilter process', details: AnyObject | null = null) {
+		crashlog(error: Error, source = `A netfilter process`, details: AnyObject | null = null) {
 			const repr = JSON.stringify([error.name, error.message, source, details]);
 			process.send!(`THROW\n@!!@${repr}\n${error.stack}`);
 		},
@@ -218,9 +236,10 @@ if (!PM.isParentProcess) {
 	// otherwise, we use the PM for interfacing with the network
 	net = new NeuralNetChecker(PATH);
 	// eslint-disable-next-line no-eval
-	Repl.start('netfilters', cmd => eval(cmd));
+	Repl.start(`netfilters-${process.pid}`, cmd => eval(cmd));
 } else {
-	PM.spawn(NUM_PROCESSES);
+	PM.spawn(NUM_PROCESSES.main);
+	PMTraining.spawn(NUM_PROCESSES.training);
 }
 
 export const commands: Chat.ChatCommands = {
@@ -266,33 +285,30 @@ export const commands: Chat.ChatCommands = {
 			const backup = FS(PATH + '.backup');
 			if (!backup.existsSync()) return this.errorReply(`No backup exists.`);
 			await backup.copyFile(PATH);
-			const result = await PM.query({type: "load", data: PATH});
+			const result = await NeuralNetChecker.query({type: "load", data: PATH});
 			if (result && result !== 'success') {
 				return this.errorReply(`Rollback failed: ${result}`);
 			}
-			this.privateGlobalModAction(`${user.name} rolled the net filters back to last backup`);
+			this.privateGlobalModAction(`${user.name} used /netfilter rollback`);
 		},
 		async test(target, room, user) {
 			checkAllowed(this);
-			const result = await PM.query({type: 'run', data: target});
+			const result = await NeuralNetChecker.query({type: 'run', data: target});
 			return this.sendReply(`Result for '${target}': ${result}`);
 		},
 		enable: 'disable',
 		disable(target, room, user, connection, cmd) {
 			checkAllowed(this);
-			let logMessage;
 			if (cmd === 'disable') {
 				if (disabled) return this.errorReply(`Net filters are already disabled.`);
 				disabled = true;
 				this.globalModlog(`NETFILTER DISABLE`);
-				logMessage = `${user.name} disabled the net filters`;
 			} else {
 				if (!disabled) return this.errorReply(`The net filters are already enabled`);
 				disabled = false;
 				this.globalModlog(`NETFILTER ENABLE`);
-				logMessage = `${user.name} enabled the net filters`;
 			}
-			this.privateGlobalModAction(logMessage);
+			this.privateGlobalModAction(`${user.name} used /netfilter ${cmd}`);
 		},
 		async trainfrom(target, room, user) {
 			checkAllowed(this);
@@ -309,13 +325,33 @@ export const commands: Chat.ChatCommands = {
 			}
 			const targetPath = FS(`logs/chat/${roomid}/${date.slice(0, -3)}/${date}.txt`);
 			if (!targetPath.existsSync()) return this.errorReply(`Logs for that date not found`);
-			this.sendReply(`Initating training...`);
-			const response = await PM.query({data: {path: targetPath.path, result}, type: 'trainfrom'});
+			this.privateGlobalModAction(`${user.name} used /netfilter trainfrom ${roomid} (${date})`);
+			const response = await NeuralNetChecker.query({data: {path: targetPath.path, result}, type: 'trainfrom'});
 			this.sendReply(`Training completed in ${Chat.toDurationString(response[0])}`);
 			this.privateGlobalModAction(
 				`${user.name} trained the net filters on logs from ${roomid} (${date} - ${Chat.count(response[1], 'lines')})`
 			);
 			this.stafflog(`Result: ${result} | Time: ${response[0]}ms`);
+		},
+		cancel: 'stop',
+		stop(target, room, user) {
+			checkAllowed(this);
+			let count = 0;
+			const running = PMTraining.processes.filter(p => p.getLoad() > 0);
+			if (!running.length) {
+				return this.errorReply(`No train tasks are pending`);
+			}
+			for (const subProcess of running) {
+				for (const [task, resolve] of subProcess.pendingTasks) {
+					resolve({error: `The pending train query was cancelled.`});
+					subProcess.pendingTasks.delete(task);
+					count++;
+				}
+				PMTraining.destroyProcess(subProcess);
+			}
+			PMTraining.spawn(NUM_PROCESSES['training']);
+			this.privateGlobalModAction(`${user.name} used /netfilter stop`);
+			this.stafflog(`(cancelled ${Chat.count(count, "ongoing netfilter train processes", 'ongoing netfilter training process')})`);
 		},
 	},
 };

@@ -579,6 +579,15 @@ export class QueryProcessManager<T = string, U = string> extends ProcessManager<
 			process.exit();
 		});
 	}
+	destroyProcess(process: QueryProcessWrapper<T, U>) {
+		process.destroy();
+		process.process.removeAllListeners('disconnect');
+		process.process.kill();
+		const idx = this.processes.indexOf(process);
+		if (idx >= 0) {
+			this.processes.splice(idx, 1);
+		}
+	}
 }
 
 export class StreamProcessManager extends ProcessManager<StreamProcessWrapper> {
