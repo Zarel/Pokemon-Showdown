@@ -97,6 +97,62 @@ interface TextTableData {
 
 export const toID = Data.toID;
 
+// function for merging the two lists
+function mergeFormats(main: FormatList, custom: FormatList | undefined): FormatList {
+	// interface for the builder.
+	interface FormatSection {
+		section: string;
+		column?: number;
+		formats: FormatData[];
+	}
+
+	// result that is return and makes the actual list for formats.
+	const result: FormatList = [];
+
+	// used as a intermediary to build the final list.
+	const build: FormatSection[] = [];
+
+	// used to track current section to keep formats under their sections.
+	let current: FormatSection | undefined = {section: "", formats: []};
+
+	// populates the original sections and formats easily
+	// there should be no repeat sections at this point.
+	for (const element of main) {
+		if (element.section) {
+			current = {section: element.section, column: element.column, formats: []};
+			build.push(current);
+		} else if ((element as FormatData).name) {
+			current.formats.push((element as FormatData));
+		}
+	}
+
+	// merges the second list the hard way. Accounts for repeats.
+	if (custom !== undefined) {
+		for (const element of custom) {
+			// finds the section and makes it if it doesn't exist.
+			if (element.section) {
+				current = build.find(e => e.section === element.section);
+
+				// if it's new it makes a new entry.
+				if (current === undefined) {
+					current = {section: element.section, column: element.column, formats: []};
+					build.push(current);
+				}
+			} else if ((element as FormatData).name) { // otherwise, adds the element to its section.
+				current.formats.push(element as FormatData);
+			}
+		}
+	}
+
+	// builds the final result.
+	for (const element of build) {
+		// adds the section to the list.
+		result.push({section: element.section, column: element.column}, ...element.formats);
+	}
+
+	return result;
+}
+
 export class ModdedDex {
 	readonly Data = Data;
 	readonly Condition = Condition;

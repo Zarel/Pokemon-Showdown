@@ -270,7 +270,6 @@ export const Scripts: ModdedBattleScriptsData = {
 
 			// We check the category and typing to calculate later on the damage
 			move.category = this.battle.getCategory(move);
-			if (!move.defensiveCategory) move.defensiveCategory = move.category;
 			// '???' is typeless damage: used for Struggle and Confusion etc
 			if (!move.type) move.type = '???';
 			const type = move.type;
@@ -329,12 +328,47 @@ export const Scripts: ModdedBattleScriptsData = {
 				level = move.allies[0].level;
 			}
 
-			let attacker = pokemon;
-			const defender = target;
-			if (move.useTargetOffensive) attacker = target;
-			let atkType: StatIDExceptHP = (move.category === 'Physical') ? 'atk' : 'spa';
-			const defType: StatIDExceptHP = (move.defensiveCategory === 'Physical') ? 'def' : 'spd';
-			if (move.useSourceDefensiveAsOffensive) atkType = defType;
+			const attacker =
+				(move.useOffensiveStatValueAndBoosts && move.useOffensiveStatValueAndBoosts.includes('target')) ? target : pokemon;
+			const defender =
+				(move.useDefensiveStatValueAndBoosts && move.useDefensiveStatValueAndBoosts.includes('source')) ? pokemon : target;
+
+			let atkType: AllStatIDs = move.category === 'Physical' ? 'atk' : 'spa';
+			if (move.useOffensiveStatValueAndBoosts) {
+				if (move.useOffensiveStatValueAndBoosts.includes("atk")) {
+					atkType = 'atk';
+				} else if (move.useOffensiveStatValueAndBoosts.includes("def")) {
+					atkType = 'def';
+				} else if (move.useOffensiveStatValueAndBoosts.includes("spa")) {
+					atkType = 'spa';
+				} else if (move.useOffensiveStatValueAndBoosts.includes("spd")) {
+					atkType = 'spd';
+				} else if (move.useOffensiveStatValueAndBoosts.includes("spe")) {
+					atkType = 'spe';
+				} else if (move.useOffensiveStatValueAndBoosts.includes("hp")) {
+					atkType = 'hp';
+				} else if (move.useOffensiveStatValueAndBoosts.includes("currenthp")) {
+					atkType = 'currenthp';
+				}
+			}
+			let defType: AllStatIDs = move.category === 'Physical' ? 'def' : 'spd';
+			if (move.useDefensiveStatValueAndBoosts) {
+				if (move.useDefensiveStatValueAndBoosts.includes("atk")) {
+					defType = 'atk';
+				} else if (move.useDefensiveStatValueAndBoosts.includes("def")) {
+					defType = 'def';
+				} else if (move.useDefensiveStatValueAndBoosts.includes("spa")) {
+					defType = 'spa';
+				} else if (move.useDefensiveStatValueAndBoosts.includes("spd")) {
+					defType = 'spd';
+				} else if (move.useDefensiveStatValueAndBoosts.includes("spe")) {
+					defType = 'spe';
+				} else if (move.useDefensiveStatValueAndBoosts.includes("hp")) {
+					defType = 'hp';
+				} else if (move.useDefensiveStatValueAndBoosts.includes("currenthp")) {
+					defType = 'currenthp';
+				}
+			}
 			let unboosted = false;
 			let noburndrop = false;
 
@@ -342,14 +376,31 @@ export const Scripts: ModdedBattleScriptsData = {
 				if (!suppressMessages) this.battle.add('-crit', target);
 				// Stat level modifications are ignored if they are neutral to or favour the defender.
 				// Reflect and Light Screen defensive boosts are only ignored if stat level modifications were also ignored as a result of that.
-				if (attacker.boosts[atkType] <= defender.boosts[defType]) {
+				if ((atkType === 'hp' || atkType === 'currenthp') ? 0 : attacker.boosts[atkType] <=
+					((defType === 'hp' || defType === 'currenthp') ? 0 : defender.boosts[defType])) {
 					unboosted = true;
 					noburndrop = true;
 				}
 			}
-			// Get stats now.
-			let attack = attacker.getStat(atkType, unboosted, noburndrop);
-			let defense = defender.getStat(defType, unboosted);
+
+			let attack;
+			let defense;
+
+			if (atkType === 'hp') {
+				attack = attacker.maxhp;
+			} else if (atkType === 'currenthp') {
+				attack = attacker.hp;
+			} else {
+				attack = attacker.getStat(atkType, unboosted, noburndrop);
+			}
+
+			if (defType === 'hp') {
+				defense = defender.maxhp;
+			} else if (defType === 'currenthp') {
+				defense = defender.hp;
+			} else {
+				defense = defender.getStat(defType, unboosted);
+			}
 
 			// Using Beat Up
 			if (move.allies) {
@@ -360,13 +411,18 @@ export const Scripts: ModdedBattleScriptsData = {
 
 			// Moves that ignore offense and defense respectively.
 			if (move.ignoreOffensive) {
-				this.battle.debug('Negating (sp)atk boost/penalty.');
-				// The attack drop from the burn is only applied when attacker's attack level is higher than defender's defense level.
-				attack = attacker.getStat(atkType, true, true);
+				if (atkType !== 'hp' && atkType !== 'currenthp') {
+					this.battle.debug('Negating (sp)atk boost/penalty.');
+					attack = attacker.getStat(atkType, true, true);
+				}
 			}
+
 			if (move.ignoreDefensive) {
-				this.battle.debug('Negating (sp)def boost/penalty.');
-				defense = target.getStat(defType, true, true);
+				if (defType !== 'hp' && defType !== 'currenthp') {
+					this.battle.debug('Negating (sp)def boost/penalty.');
+					// No screens
+					defense = target.getStat(defType, true, true);
+				}
 			}
 
 			if (attack >= 256 || defense >= 256) {

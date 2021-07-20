@@ -23,6 +23,7 @@ type ID = '' | string & {__isID: true};
 type PokemonSlot = '' | string & {__isSlot: true};
 interface AnyObject {[k: string]: any}
 
+type AllStatIDs = 'currenthp' | StatID;
 type GenderName = 'M' | 'F' | 'N' | '';
 type StatIDExceptHP = 'atk' | 'def' | 'spa' | 'spd' | 'spe';
 type StatID = 'hp' | StatIDExceptHP;

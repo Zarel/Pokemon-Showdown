@@ -1399,7 +1399,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 10,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1},
-		useSourceDefensiveAsOffensive: true,
+		useOffensiveStatValueAndBoosts: 'source:def',
 		secondary: null,
 		target: "normal",
 		type: "Fighting",
@@ -5633,7 +5633,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		pp: 15,
 		priority: 0,
 		flags: {contact: 1, protect: 1, mirror: 1},
-		useTargetOffensive: true,
+		useOffensiveStatValueAndBoosts: 'target:atk',
 		secondary: null,
 		target: "normal",
 		type: "Dark",
@@ -13320,7 +13320,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		accuracy: 100,
 		basePower: 80,
 		category: "Special",
-		defensiveCategory: "Physical",
+		useDefensiveStatValueAndBoosts: 'target:def',
 		name: "Psyshock",
 		pp: 10,
 		priority: 0,
@@ -13335,7 +13335,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		accuracy: 100,
 		basePower: 100,
 		category: "Special",
-		defensiveCategory: "Physical",
+		useDefensiveStatValueAndBoosts: 'target:def',
 		name: "Psystrike",
 		pp: 10,
 		priority: 0,
@@ -14863,7 +14863,7 @@ export const Moves: {[moveid: string]: MoveData} = {
 		accuracy: 100,
 		basePower: 85,
 		category: "Special",
-		defensiveCategory: "Physical",
+		useDefensiveStatValueAndBoosts: 'target:def',
 		name: "Secret Sword",
 		pp: 10,
 		priority: 0,
@@ -19441,13 +19441,24 @@ export const Moves: {[moveid: string]: MoveData} = {
 				}
 				return 5;
 			},
+			onModifyMove(move, source, target) {
+				if (move.useOffensiveStatValueAndBoosts) {
+					if (move.useOffensiveStatValueAndBoosts.includes("def")) {
+						move.useOffensiveStatValueAndBoosts.replace("def", "spd");
+						if (source.boosts['def'] || source.boosts['spd']) {
+							this.hint("Body Press uses Sp. Def boosts when Wonder Room is active.");
+						}
+					} else if (move.useOffensiveStatValueAndBoosts.includes("spd")) {
+						move.useOffensiveStatValueAndBoosts.replace("spd", "def");
+					}
+				}
+			},
 			onFieldStart(field, source) {
 				this.add('-fieldstart', 'move: Wonder Room', '[of] ' + source);
 			},
 			onFieldRestart(target, source) {
 				this.field.removePseudoWeather('wonderroom');
 			},
-			// Swapping defenses implemented in sim/pokemon.js:Pokemon#calculateStat and Pokemon#getStat
 			onFieldResidualOrder: 27,
 			onFieldResidualSubOrder: 5,
 			onFieldEnd() {
