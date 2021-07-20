@@ -15,7 +15,7 @@ import * as fs from 'fs';
 import * as http from 'http';
 import * as https from 'https';
 import * as path from 'path';
-import {crashlogger, ProcessManager, Streams, Repl} from '../lib';
+import {crashlogger, ProcessManager, Streams, Repl, Utils} from '../lib';
 import {IPTools} from './ip-tools';
 
 type StreamWorker = ProcessManager.StreamWorker;
@@ -51,6 +51,15 @@ export const Sockets = new class {
 				const socketid = data.substr(1, idx - 1);
 				const message = data.substr(idx + 1);
 				Users.socketReceive(worker, id, socketid, message);
+				break;
+			}
+
+			case '&': {
+				// &roomid, pline
+				// forcibly add a pline directly to a room ID
+				// (intended for logging)
+				const [roomid, message] = Utils.splitFirst(data, '\n');
+				Rooms.get(roomid)?.add(message).update();
 				break;
 			}
 
@@ -495,6 +504,11 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 				}
 			}
 		}
+		if (Config.validateSocket && Config.validateSocket.call(this, socket, socketip) === false) {
+			socket.destroy();
+			this.sockets.delete(socketid);
+			return;
+		}
 
 		this.push(`*${socketid}\n${socketip}\n${socket.protocol}`);
 
@@ -529,6 +543,10 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 
 		const receiver = this.receivers[data.charAt(0)];
 		if (receiver) receiver.call(this, data);
+	}
+	log(message: string, roomid?: RoomID) {
+		if (!roomid) roomid = 'adminlog' as RoomID;
+		this.push(`&${roomid}\n${message}`);
 	}
 }
 
