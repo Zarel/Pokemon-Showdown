@@ -141,6 +141,8 @@ represented by a space), and the rest of the string being their username.
 
 > We received an HTML message, which should be sanitized and displayed
 > directly in the room's log.
+> Unusable tags: `<iframe>`, `<script>`, `<base>`, `<meta>`, `<canvas>`, `<link>`, and `<head>`.
+> Custom tags: `<psicon [pokemon or item]=[source]>`, `<username [name?]=[source name]>`
 
 `|uhtml|NAME|HTML`
 
