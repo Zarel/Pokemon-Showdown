@@ -406,12 +406,14 @@ export const commands: Chat.ChatCommands = {
 			}
 
 			const currentPermissions = room.settings.permissions || {};
-			if (currentPermissions[perm] === (rank || undefined)) {
-				return this.errorReply(`${perm} is already set to ${rank || 'default'}.`);
-			}
 
 			if (rank) {
-				currentPermissions[perm] = rank as GroupSymbol;
+				currentPermissions[perm] = currentPermissions[perm] || {};
+				if (currentPermissions[perm][rank]) {
+					delete currentPermissions[perm][rank];
+				} else {
+					currentPermissions[perm][rank as GroupSymbol] = true;
+				}
 				room.settings.permissions = currentPermissions;
 			} else {
 				delete currentPermissions[perm];
@@ -422,7 +424,7 @@ export const commands: Chat.ChatCommands = {
 			if (!rank) rank = `default`;
 			this.modlog(`SETPERMISSION`, null, `${perm}: ${rank}`);
 			this.refreshPage(`permissions-${room.roomid}`);
-			return this.privateModAction(`${user.name} set the required rank for ${perm} to ${rank}.`);
+			return this.privateModAction(`${user.name} changed permissions on ${perm} for ${rank}.`);
 		},
 		sethelp: [
 			`/permissions set [command], [rank symbol] - sets the required permission to use the command [command] to [rank]. Requires: # &`,
@@ -1666,12 +1668,15 @@ export const pages: Chat.PageTable = {
 			buf += `<tr><td><strong>${permission}</strong></td><td>`;
 			if (room.auth.atLeast(user, '#')) {
 				buf += roomGroups.filter(group => group !== Users.SECTIONLEADER_SYMBOL).map(group => (
-					requiredRank === group ?
-						Utils.html`<button class="button disabled" style="font-weight:bold;color:#575757;background:#d3d3d3">${group}</button>` :
+					requiredRank[group] ?
+						Utils.html`<button class="button" name="send" value="/msgroom ${room.roomid},/permissions set ${permission}, ${group}" style="font-weight:bold;background:#e3c3a3;">${group}</button>` :
 						Utils.html`<button class="button" name="send" value="/msgroom ${room.roomid},/permissions set ${permission}, ${group}">${group}</button>`
 				)).join(' ');
 			} else {
-				buf += Utils.html`<button class="button disabled" style="font-weight:bold;color:#575757;background:#d3d3d3">${requiredRank}</button>`;
+				buf += roomGroups.filter(group => group !== Users.SECTIONLEADER_SYMBOL).map(group => (
+					requiredRank[group] ?
+						Utils.html`<button class="button disabled">${group}</button>` : ''
+				)).join(' ');
 			}
 			buf += `</td>`;
 		}

@@ -160,17 +160,20 @@ export abstract class Auth extends Map<ID, GroupSymbol | ''> {
 				if (roomPermissions[`/${cmd}`]) {
 					// this checks sub commands and command objects, but it checks to see if a sub-command
 					// overrides (should a perm for the command object exist) first
+					return roomPermissions[`/${cmd}`][symbol];
 					if (!auth.atLeast(user, roomPermissions[`/${cmd}`])) return false;
 					jurisdiction = 'u';
 					foundSpecificPermission = true;
 				} else if (roomPermissions[`/${namespace}`]) {
 					// if it's for one command object
+					return roomPermissions[`/${namespace}`][symbol];
 					if (!auth.atLeast(user, roomPermissions[`/${namespace}`])) return false;
 					jurisdiction = 'u';
 					foundSpecificPermission = true;
 				}
 			}
 			if (!foundSpecificPermission && roomPermissions[permission]) {
+				return (roomPermissions[permission][symbol]);
 				if (!auth.atLeast(user, roomPermissions[permission])) return false;
 				jurisdiction = 'u';
 			}
