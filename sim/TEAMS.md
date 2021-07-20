@@ -170,7 +170,7 @@ Armaldo||leftovers|swiftswim|xscissor,stoneedge,aquatail,rapidspin|Adamant|128,2
 The format is a list of pokemon delimited by `]`, where every Pokémon is:
 
 ```
-NICKNAME|SPECIES|ITEM|ABILITY|MOVES|NATURE|EVS|GENDER|IVS|SHINY|LEVEL|HAPPINESS,POKEBALL,HIDDENPOWERTYPE
+NICKNAME|SPECIES|ITEM|ABILITY|MOVES|NATURE|EVS|GENDER|IVS|SHINY|LEVEL|HAPPINESS,POKEBALL,HIDDENPOWERTYPE,DYNAMAXLEVEL,GIGANTAMAX
 ```
 
 - `SPECIES` is left blank if it's identical to `NICKNAME`
@@ -206,8 +206,9 @@ NICKNAME|SPECIES|ITEM|ABILITY|MOVES|NATURE|EVS|GENDER|IVS|SHINY|LEVEL|HAPPINESS,
   Hyper Training doesn't affect IVs, or if it's represented by a move in
   the moves list.
 
-- If `POKEBALL` and `HIDDENPOWERTYPE` are both blank, the commas will be left
-  off.
+- `DYNAMAXLEVEL` is left blank for 10.
+
+- `GIGANTAMAX` is `G` for Gmax, blank for non-Gmax.
 
 
 Converting between formats

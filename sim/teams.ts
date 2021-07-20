@@ -98,6 +98,11 @@ export interface PokemonSet {
 	 * because `ivs` contain post-Battle-Cap values.
 	 */
 	hpType?: string;
+	/**
+	 * Dynamax Level. Affects the amount of HP gained when Dynamaxed.
+	 * This value must be between 0 and 10, inclusive.
+	 */
+	dynamaxLevel?: number;
 	gigantamax?: boolean;
 }
 
@@ -183,9 +188,10 @@ export const Teams = new class Teams {
 				buf += '|';
 			}
 
-			if (set.pokeball || set.hpType || set.gigantamax) {
+			if (set.pokeball || set.hpType || (set.dynamaxLevel !== undefined && set.dynamaxLevel !== 10) || set.gigantamax) {
 				buf += ',' + (set.hpType || '');
 				buf += ',' + this.packName(set.pokeball || '');
+				buf += ',' + (set.dynamaxLevel !== undefined && set.dynamaxLevel !== 10 ? set.dynamaxLevel : '');
 				buf += ',' + (set.gigantamax ? 'G' : '');
 			}
 		}
@@ -311,7 +317,8 @@ export const Teams = new class Teams {
 				set.happiness = (misc[0] ? Number(misc[0]) : 255);
 				set.hpType = misc[1] || '';
 				set.pokeball = this.unpackName(misc[2] || '', Dex.items);
-				set.gigantamax = !!misc[3];
+				set.dynamaxLevel = (misc[3] ? Number(misc[3]) : 10);
+				set.gigantamax = !!misc[4];
 			}
 			if (j < 0) break;
 			i = j + 1;
@@ -380,6 +387,9 @@ export const Teams = new class Teams {
 		}
 		if (set.hpType) {
 			out += `Hidden Power: ${set.hpType}  \n`;
+		}
+		if (typeof set.dynamaxLevel === `number` && set.dynamaxLevel !== 10 && !isNaN(set.dynamaxLevel)) {
+			out += `Dynamax Level: ${set.dynamaxLevel}  \n`;
 		}
 		if (set.gigantamax) {
 			out += `Gigantamax: Yes  \n`;

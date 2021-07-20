@@ -53,6 +53,7 @@ export class Pokemon {
 	readonly gender: GenderName;
 	readonly happiness: number;
 	readonly pokeball: string;
+	readonly dynamaxLevel: number;
 	readonly gigantamax: boolean;
 
 	/** Transform keeps the original pre-transformed Hidden Power in Gen 2-4. */
@@ -302,6 +303,7 @@ export class Pokemon {
 		if (this.gender === 'N') this.gender = '';
 		this.happiness = typeof set.happiness === 'number' ? this.battle.clampIntRange(set.happiness, 0, 255) : 255;
 		this.pokeball = this.set.pokeball || 'pokeball';
+		this.dynamaxLevel = typeof set.dynamaxLevel === 'number' ? this.battle.clampIntRange(set.dynamaxLevel, 0, 10) : 10;
 		this.gigantamax = this.set.gigantamax || false;
 
 		this.baseMoveSlots = [];

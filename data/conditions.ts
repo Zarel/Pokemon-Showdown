@@ -704,7 +704,7 @@ export const Conditions: {[k: string]: ConditionData} = {
 			if (pokemon.baseSpecies.name === 'Shedinja') return;
 
 			// Changes based on dynamax level, 2 is max (at LVL 10)
-			const ratio = 2; // TODO: Implement Dynamax levels
+			const ratio = 1.5 + (pokemon.dynamaxLevel * 0.05);
 
 			pokemon.maxhp = Math.floor(pokemon.maxhp * ratio);
 			pokemon.hp = Math.floor(pokemon.hp * ratio);
