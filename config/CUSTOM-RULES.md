@@ -170,7 +170,7 @@ Custom rules can have more complicated behavior. They can also include other rul
 
 `Alola Pokedex` - allow only Pokémon in the Alola Pokédex (US/UM)
 
-(There is no `Galar Pokedex` rule, `-Nonexistent` covers it in Gen 8.)
+`Galar Pokedex` - allow only Pokémon in the Galar Pokédex (SW/SH) [Ban pokemon you can catch in the adventures but are not listed in the pokedex like Ultracreatures, Landorus, etc...]
 
 ### Clauses
 
