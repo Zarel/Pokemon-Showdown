@@ -36,7 +36,7 @@ describe('Berserk', function () {
 		assert.equal(drampa.hp, drampa.maxhp - 200 + Math.floor(drampa.maxhp / 4));
 	});
 
-	it.skip(`should not activate below 50% HP if it was damaged by Dragon Darts`, function () {
+	it(`should not activate below 50% HP if it was damaged by Dragon Darts`, function () {
 		battle = common.createBattle({gameType: 'doubles'}, [[
 			{species: 'drampa', ability: 'berserk', evs: {hp: 4}, moves: ['sleeptalk']},
 			{species: 'togedemaru', ability: 'compoundeyes', moves: ['superfang']},

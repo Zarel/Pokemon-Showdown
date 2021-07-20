@@ -341,7 +341,16 @@ export const Abilities: {[abilityid: string]: AbilityData} = {
 			if (!source || source === target || !target.hp || !move.totalDamage) return;
 			const lastAttackedBy = target.getLastAttackedBy();
 			if (!lastAttackedBy) return;
-			const damage = move.multihit ? move.totalDamage : lastAttackedBy.damage;
+
+			// how many different targets were hit by the move
+			let total = 0;
+			if (move.id === 'dragondarts') {
+				const {targets} = source.getMoveTargets(move, target);
+				for (const hitby of targets) {
+					if (hitby.name) total++;
+				}
+			}
+			const damage = (move.multihit && total < 2) ? move.totalDamage : lastAttackedBy.damage;
 			if (target.hp <= target.maxhp / 2 && target.hp + damage > target.maxhp / 2) {
 				this.boost({spa: 1});
 			}
