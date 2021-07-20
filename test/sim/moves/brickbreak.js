@@ -38,7 +38,7 @@ describe('Brick Break', function () {
 		assert(battle.p2.sideConditions['reflect']);
 	});
 
-	it.skip('should break Reflect when used against a Ghost-type in Gen 4 or earlier', function () {
+	it('should break Reflect when used against a Ghost-type in Gen 4 or earlier', function () {
 		battle = common.gen(4).createBattle([[
 			{species: "mew", moves: ['brickbreak', 'splash']},
 		], [
@@ -49,6 +49,7 @@ describe('Brick Break', function () {
 		assert(battle.p2.sideConditions['reflect']);
 
 		battle.makeChoices('move brickbreak', 'move splash');
+		common.saveReplay(battle, 'brickbreak.js');
 		assert.false(battle.p2.sideConditions['reflect']);
 	});
 
