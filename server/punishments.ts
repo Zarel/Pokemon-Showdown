@@ -1293,6 +1293,7 @@ export const Punishments = new class {
 
 		for (const curUser of affected) {
 			// ensure there aren't roombans so nothing gets mixed up
+			// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 			Punishments.roomUnban(room, (curUser as any).id || curUser);
 			if (room.game && room.game.removeBannedUser) {
 				room.game.removeBannedUser(curUser);

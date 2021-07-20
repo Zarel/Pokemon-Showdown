@@ -1627,6 +1627,8 @@ export class BattleActions {
 		// int(int(int(2 * L / 5 + 2) * A * P / D) / 50);
 		const baseDamage = tr(tr(tr(tr(2 * level / 5 + 2) * basePower * attack) / defense) / 50);
 
+		if (baseDamage > 0) target.hitSelf = false;
+
 		// Calculate damage modifiers separately (order differs between generations)
 		return this.modifyDamage(baseDamage, pokemon, target, move, suppressMessages);
 	}
@@ -1734,6 +1736,7 @@ export class BattleActions {
 		// Damage is 16-bit context in self-hit confusion damage
 		let damage = tr(baseDamage, 16);
 		damage = this.battle.randomizer(damage);
+		pokemon.hitSelf = true;
 		return Math.max(1, damage);
 	}
 

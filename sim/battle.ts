@@ -1407,6 +1407,7 @@ export class Battle {
 			let sideStaleness: 'internal' | 'external' | undefined;
 			for (const pokemon of side.active) {
 				if (!pokemon) continue;
+				pokemon.hitSelf = false;
 				pokemon.moveThisTurn = '';
 				pokemon.newlySwitched = false;
 				pokemon.moveLastTurnResult = pokemon.moveThisTurnResult;
@@ -1841,17 +1842,21 @@ export class Battle {
 			if (source && effect.effectType === 'Move') source.lastDamage = targetDamage;
 
 			const name = effect.fullname === 'tox' ? 'psn' : effect.fullname;
+
 			switch (effect.id) {
 			case 'partiallytrapped':
+				if (target.hitSelf) target.hitSelf = false;
 				this.add('-damage', target, target.getHealth, '[from] ' + this.effectState.sourceEffect.fullname, '[partiallytrapped]');
 				break;
 			case 'powder':
+				if (target.hitSelf) target.hitSelf = false;
 				this.add('-damage', target, target.getHealth, '[silent]');
 				break;
 			case 'confused':
 				this.add('-damage', target, target.getHealth, '[from] confusion');
 				break;
 			default:
+				if (target.hitSelf) target.hitSelf = false;
 				if (effect.effectType === 'Move' || !name) {
 					this.add('-damage', target, target.getHealth);
 				} else if (source && (source !== target || effect.effectType === 'Ability')) {
