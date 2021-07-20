@@ -317,6 +317,7 @@ export class BattleQueue {
 				return true;
 			}
 		}
+		pokemon.moveThisTurnResult = null;
 		return false;
 	}
 

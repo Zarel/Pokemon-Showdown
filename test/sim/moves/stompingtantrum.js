@@ -90,7 +90,7 @@ describe('Stomping Tantrum', function () {
 		battle.makeChoices('move stompingtantrum', 'auto');
 	});
 
-	it.skip(`should not double its Base Power if the user dropped mid-Fly due to Smack Down`, function () {
+	it(`should not double its Base Power if the user dropped mid-Fly due to Smack Down`, function () {
 		battle = common.createBattle([[
 			{species: 'Magikarp', moves: ['fly', 'stompingtantrum']},
 		], [
