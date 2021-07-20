@@ -1298,7 +1298,12 @@ const commands: Chat.ChatCommands = {
 			this.checkCan('tournaments', null, room);
 			const [format, generator, cap, mod, name] = target.split(',').map(item => item.trim());
 			if (!target || !format || !generator) {
-				return this.sendReply(`Usage: /tour ${cmd} <format>, <type> [, <comma-separated arguments>]`);
+				if (room.game) {
+					throw new Chat.ErrorMessage(`You cannot start a tournament until the current room activity (${room.game.title}) ends.`);
+				}
+
+				const generatorOptions = {elimination: 'Elimination', roundrobin: 'Round Robin'};
+				return this.sendReply(`|tournament|menu|${JSON.stringify(generatorOptions)}`);
 			}
 
 			const tour: Tournament | undefined = createTournament(room, format, generator, cap, Config.ratedtours, mod, name, this);
@@ -2128,6 +2133,7 @@ const commands: Chat.ChatCommands = {
 	tournamenthelp() {
 		if (!this.runBroadcast()) return;
 		this.sendReplyBox(
+			`- create/new: Displays a simple menu for creating a tournament in the current room.` +
 			`- create/new &lt;format>, &lt;type>, [ &lt;comma-separated arguments>]: Creates a new tournament in the current room.<br />` +
 			`- settype &lt;type> [, &lt;comma-separated arguments>]: Modifies the type of tournament after it's been created, but before it has started.<br />` +
 			`- cap/playercap &lt;cap>: Sets the player cap of the tournament before it has started.<br />` +
