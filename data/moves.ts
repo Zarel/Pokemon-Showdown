@@ -2713,34 +2713,22 @@ export const Moves: {[moveid: string]: MoveData} = {
 				const sourceSide = source.side;
 				const targetSide = source.side.foe;
 				for (const id of sideConditions) {
-					const effectName = this.dex.conditions.get(id).name;
 					if (sourceSide.sideConditions[id] && targetSide.sideConditions[id]) {
 						[sourceSide.sideConditions[id], targetSide.sideConditions[id]] = [
 							targetSide.sideConditions[id], sourceSide.sideConditions[id],
 						];
-						this.add('-sideend', sourceSide, effectName, '[silent]');
-						this.add('-sideend', targetSide, effectName, '[silent]');
 					} else if (sourceSide.sideConditions[id] && !targetSide.sideConditions[id]) {
 						targetSide.sideConditions[id] = sourceSide.sideConditions[id];
 						delete sourceSide.sideConditions[id];
-						this.add('-sideend', sourceSide, effectName, '[silent]');
 					} else if (targetSide.sideConditions[id] && !sourceSide.sideConditions[id]) {
 						sourceSide.sideConditions[id] = targetSide.sideConditions[id];
 						delete targetSide.sideConditions[id];
-						this.add('-sideend', targetSide, effectName, '[silent]');
 					} else {
 						continue;
 					}
-					let sourceLayers = sourceSide.sideConditions[id] ? (sourceSide.sideConditions[id].layers || 1) : 0;
-					let targetLayers = targetSide.sideConditions[id] ? (targetSide.sideConditions[id].layers || 1) : 0;
-					for (; sourceLayers > 0; sourceLayers--) {
-						this.add('-sidestart', sourceSide, effectName, '[silent]');
-					}
-					for (; targetLayers > 0; targetLayers--) {
-						this.add('-sidestart', targetSide, effectName, '[silent]');
-					}
 					success = true;
 				}
+				this.add('-swapsideconditions');
 			}
 			if (!success) return false;
 			this.add('-activate', source, 'move: Court Change');

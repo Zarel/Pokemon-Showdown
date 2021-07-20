@@ -444,6 +444,10 @@ stat boosts are minor actions.
 
 > Indicates that the side condition `CONDITION` ended for the given `SIDE`.
 
+`|-swapsideconditions`
+
+> Swaps side conditions between sides. Used for Court Change.
+
 `|-start|POKEMON|EFFECT`
 
 > A [*volatile* status](https://bulbapedia.bulbagarden.net/wiki/Status_condition#Volatile_status)
