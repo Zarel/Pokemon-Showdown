@@ -192,6 +192,7 @@ export const Conditions: {[id: string]: ModdedConditionData} = {
 			this.add('cant', pokemon, 'partiallytrapped');
 			return false;
 		},
+		onLockMove: 'fight',
 	},
 	partialtrappinglock: {
 		name: 'partialtrappinglock',

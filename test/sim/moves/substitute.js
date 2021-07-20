@@ -131,7 +131,7 @@ describe('Substitute', function () {
 		assert.equal(pokemon.maxhp - pokemon.hp, Math.floor(pokemon.maxhp / 4));
 
 		const hp = pokemon.hp;
-		battle.makeChoices('move growl', 'move clamp');
+		battle.makeChoices('move fight', 'move clamp');
 		assert.bounded(hp - pokemon.hp, [91, 108]);
 	});
 });
