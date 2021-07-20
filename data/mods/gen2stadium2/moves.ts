@@ -50,6 +50,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 			for (const pokemon of this.getAllActive()) {
 				pokemon.clearBoosts();
 				for (const id of Object.keys(pokemon.volatiles)) {
+					if (id === 'residualdmg') continue;
 					pokemon.removeVolatile(id);
 					this.add('-end', pokemon, id);
 				}
