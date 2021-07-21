@@ -19,5 +19,5 @@ server/chat-plugins/the-studio.ts @KrisXV
 server/chat-plugins/trivia.ts @AnnikaCodes
 server/friends.ts @mia-pi-git
 server/chat-plugins/username-prefixes.ts @AnnikaCodes
-server/modlog.ts @monsanto
+server/modlog/* @monsanto @AnnikaCodes
 test/random-battles/* @AnnikaCodes

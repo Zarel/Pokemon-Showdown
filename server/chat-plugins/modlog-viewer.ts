@@ -2,7 +2,7 @@
  * Modlog viewer
  * Pokemon Showdown - http://pokemonshowdown.com/
  *
- * Actually reading, writing, and searching modlog is handled in modlog.ts.
+ * Actually reading, writing, and searching modlog is handled in server/modlog/.
  *
  * @license MIT
  */
