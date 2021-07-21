@@ -21,6 +21,8 @@ import {IPTools} from './ip-tools';
 type StreamWorker = ProcessManager.StreamWorker;
 type ChannelID = 0 | 1 | 2 | 3 | 4;
 
+const MAX_SOCKET_WAIT_TIME = 1 * 60 * 1000;
+
 export const Sockets = new class {
 	async onSpawn(worker: StreamWorker) {
 		const id = worker.workerid;
@@ -51,6 +53,11 @@ export const Sockets = new class {
 				const socketid = data.substr(1, idx - 1);
 				const message = data.substr(idx + 1);
 				Users.socketReceive(worker, id, socketid, message);
+				break;
+			}
+
+			case '&': {
+				Monitor.slow(data.slice(1));
 				break;
 			}
 
@@ -176,6 +183,9 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 			const socketid = data.substr(1, nlLoc - 1);
 			const socket = this.sockets.get(socketid);
 			if (!socket) return;
+			if (this.waitingSockets.has(socketid)) {
+				this.waitingSockets.delete(socketid);
+			}
 			const message = data.substr(nlLoc + 1);
 			socket.write(message);
 		},
@@ -262,6 +272,10 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 			}
 		},
 	};
+
+	/** Map<socketid, [login message, date]> */
+	waitingSockets = new Map<string, [string, number]>();
+	socketSweepInterval = setInterval(() => this.sweepWaiting(), MAX_SOCKET_WAIT_TIME);
 
 	constructor(config: {
 		port: number,
@@ -496,7 +510,9 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 			}
 		}
 
-		this.push(`*${socketid}\n${socketip}\n${socket.protocol}`);
+		const loginMessage = `*${socketid}\n${socketip}\n${socket.protocol}`;
+		this.push(loginMessage);
+		this.waitingSockets.set(socketid, [loginMessage, Date.now()]);
 
 		socket.on('data', message => {
 			// drop empty messages (DDoS?)
@@ -520,6 +536,14 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 		socket.once('close', () => {
 			this.push(`!${socketid}`);
 			this.sockets.delete(socketid);
+			const wait = this.waitingSockets.get(socketid);
+			if (wait) {
+				const diff = Date.now() - wait[1];
+				if (diff > 1000) { // if they've waited more than a second, something has probably gone wrong
+					this.push(`&[Slow socket] (${diff}ms) ${socketid} <${socketip}> failed to be connected.`);
+				}
+				this.waitingSockets.delete(socketid);
+			}
 			for (const room of this.rooms.values()) room.delete(socketid);
 		});
 	}
@@ -529,6 +553,21 @@ export class ServerStream extends Streams.ObjectReadWriteStream<string> {
 
 		const receiver = this.receivers[data.charAt(0)];
 		if (receiver) receiver.call(this, data);
+	}
+	sweepWaiting() {
+		if (!this.waitingSockets.size) return;
+		for (const [socketid, [message, date]] of this.waitingSockets) {
+			// if it's been more than this time and the socket hasn't managed to connect
+			// something has gone quite wrong. Push a reconnect and then error.
+			if (Date.now() > (date + MAX_SOCKET_WAIT_TIME)) {
+				this.push(message);
+				this.waitingSockets.set(socketid, [message, Date.now()]);
+				const socket = this.sockets.get(socketid);
+				this.push(
+					`&[Slow socket] (${Date.now() - date}ms) ${socketid} <${socket?.remoteAddress}> failed to be connected.`
+				);
+			}
+		}
 	}
 }
 
