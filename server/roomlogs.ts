@@ -29,7 +29,7 @@ interface RoomlogOptions {
  * The modlog is stored in
  * `logs/modlog/modlog_<ROOMID>.txt`
  * It contains moderator messages, formatted for ease of search.
- * Direct modlog access is handled in modlog.ts; this file is just
+ * Direct modlog access is handled in server/modlog/; this file is just
  * a wrapper to make other code more readable.
  *
  * The roomlog is stored in

@@ -1,32 +1,20 @@
-CREATE TABLE modlog (
-    modlog_id INTEGER NOT NULL PRIMARY KEY,
-    -- UNIX timestamp
-    timestamp INTEGER NOT NULL,
-    roomid TEXT NOT NULL,
-    is_global TINYINT(1) NOT NULL,
-    action TEXT NOT NULL,
-    visual_roomid TEXT NOT NULL,
-    note TEXT NOT NULL,
-    action_taker_userid TEXT,
-    userid TEXT,
-    autoconfirmed_userid TEXT,
-    ip TEXT
-);
 
-CREATE TABLE alts (
-    modlog_id INTEGER NOT NULL,
-    userid TEXT NOT NULL,
-    PRIMARY KEY (modlog_id, userid),
-    FOREIGN KEY (modlog_id) REFERENCES modlog(modlog_id)
-) WITHOUT ROWID;
+BEGIN TRANSACTION;
+
+-- add is_global column
+ALTER TABLE modlog ADD COLUMN is_global TINYINT(1) NOT NULL DEFAULT 0;
+UPDATE modlog SET is_global = 1, roomid = substr(roomid, 8) WHERE roomid LIKE 'global-%';
+
+
+-- add db_info table
 
 CREATE TABLE db_info (
     key TEXT NOT NULL,
     value TEXT NOT NULL
 );
-
 INSERT INTO db_info VALUES ('version', '2');
 
+-- add indices for searches
 CREATE INDEX global_index ON modlog(is_global, timestamp);
 CREATE INDEX global_action_index ON modlog(is_global, action, timestamp);
 CREATE INDEX global_userid_index_1 ON modlog(is_global, userid, timestamp);
@@ -51,4 +39,4 @@ CREATE INDEX ip_index ON modlog(roomid, ip, timestamp);
 CREATE INDEX note_index ON modlog(roomid, note, timestamp);
 CREATE INDEX action_taker_index ON modlog(roomid, action_taker_userid, timestamp);
 
-PRAGMA journal_mode=WAL;
+COMMIT;

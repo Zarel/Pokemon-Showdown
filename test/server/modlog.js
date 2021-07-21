@@ -1,5 +1,5 @@
 /**
- * Tests for server/modlog.ts
+ * Tests for the modlog
  * Written by Annika
  */
 
@@ -31,13 +31,18 @@ const DATASET_B = [
 	{action: 'TOUR START', loggedBy: 'annika'},
 ];
 
-function lastLine(database, roomid) {
-	return database.prepare(
+async function lastLine(database, roomid) {
+	const prepared = await database.prepare(
 		`SELECT * FROM modlog WHERE roomid = ? ORDER BY modlog_id DESC LIMIT 1`
-	).get(roomid);
+	);
+	return database.get(prepared, [roomid]);
 }
 
 (Config.usesqlite ? describe : describe.skip)('Modlog', () => {
+	before(async () => {
+		if (modlog.readyPromise) await modlog.readyPromise;
+	});
+
 	describe.skip('Modlog#prepareSQLSearch', () => {
 		it('should respect the maxLines parameter', () => {
 			const query = modlog.prepareSQLSearch(['lobby'], 1337, false, {});
@@ -69,35 +74,21 @@ function lastLine(database, roomid) {
 	(Config.usesqlite ? describe : describe.skip)('Modlog#write', () => {
 		it('should write messages serially to the modlog', async () => {
 			modlog.initialize('development');
-			modlog.write('development', {note: 'This message is logged first', action: 'UNITTEST'});
-			modlog.write('development', {note: 'This message is logged second', action: 'UNITTEST'});
-			const lines = modlog.database.prepare(
+			await modlog.write('development', {note: 'This message is logged first', action: 'UNITTEST'});
+			await modlog.write('development', {note: 'This message is logged second', action: 'UNITTEST'});
+			const lines = await modlog.database.all(await modlog.database.prepare(
 				// Order by modlog_id since the writes most likely happen at the same second
 				`SELECT * FROM modlog WHERE roomid = 'development' ORDER BY modlog_id DESC LIMIT 2`
-			).all();
+			));
 
 			assert.equal(lines.pop().note, 'This message is logged first');
 			assert.equal(lines.pop().note, 'This message is logged second');
 		});
 
-		it('should throw an error when writing to a destroyed modlog stream', () => {
-			modlog.initialize('somedeletedroom');
-			assert.doesNotThrow(() => modlog.write('somedeletedroom', {action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', staff: 'annika'}));
-			modlog.destroy('somedeletedroom');
-			assert.throws(() => modlog.write('somedeletedroom', {action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', staff: 'annika'}));
-		});
-
-		it('should throw an error when writing to an uninitialized modlog stream', () => {
-			assert.throws(() => modlog.write('lmaothisroomisntreal', {action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', staff: 'annika'}));
-			modlog.initialize('itsrealnow');
-			assert.doesNotThrow(() => modlog.write('itsrealnow', {action: 'ROOMBAN', userid: 'sometroll', ip: '127.0.0.1', staff: 'annika'}));
-		});
-
-
 		it('should use overrideID if specified', async () => {
 			modlog.initialize('battle-gen8randombattle-1337');
-			modlog.write('battle-gen8randombattle-1337', {note: "I'm testing overrideID", action: 'UNITTEST'}, 'heyadora');
-			const line = lastLine(modlog.database, 'battle-gen8randombattle-1337');
+			await modlog.write('battle-gen8randombattle-1337', {note: "I'm testing overrideID", action: 'UNITTEST'}, 'heyadora');
+			const line = await lastLine(modlog.database, 'battle-gen8randombattle-1337');
 			assert.equal(line.note, "I'm testing overrideID");
 			assert.equal(line.visual_roomid, 'heyadora');
 		});
@@ -108,17 +99,17 @@ function lastLine(database, roomid) {
 			const entry = {note: 'This is in a modlog that will be renamed!', action: 'UNITTEST'};
 
 			modlog.initialize('oldroom');
-			modlog.write('oldroom', entry);
+			await modlog.write('oldroom', entry);
 			await modlog.rename('oldroom', 'newroom');
-			const line = lastLine(modlog.database, 'newroom');
+			const line = await lastLine(modlog.database, 'newroom');
 
 			assert.equal(entry.action, line.action);
 			assert.equal(entry.note, line.note);
 
 			const newEntry = {note: 'This modlog has been renamed!', action: 'UNITTEST'};
-			modlog.write('newroom', newEntry);
+			await modlog.write('newroom', newEntry);
 
-			const newLine = lastLine(modlog.database, 'newroom');
+			const newLine = await lastLine(modlog.database, 'newroom');
 
 			assert.equal(newEntry.action, newLine.action);
 			assert.equal(newEntry.note, newLine.note);
@@ -131,10 +122,10 @@ function lastLine(database, roomid) {
 			modlog.initialize('readingtest');
 			modlog.initialize('readingtest2');
 			for (const entry of DATASET_A) {
-				modlog.write('readingtest', entry);
+				await modlog.write('readingtest', entry);
 			}
 			for (const entry of DATASET_B) {
-				modlog.write('readingtest2', entry);
+				await modlog.write('readingtest2', entry);
 			}
 		});
 
@@ -163,8 +154,8 @@ function lastLine(database, roomid) {
 		it.skip('should be LIFO (last-in, first-out)', async () => {
 			modlog.initialize('lifotest');
 
-			modlog.write('lifotest', {note: 'firstwrite', action: 'UNITTEST', timestamp: 1});
-			modlog.write('lifotest', {note: 'secondwrite', action: 'UNITTEST', timestamp: 2});
+			await modlog.write('lifotest', {note: 'firstwrite', action: 'UNITTEST', timestamp: 1});
+			await modlog.write('lifotest', {note: 'secondwrite', action: 'UNITTEST', timestamp: 2});
 			const search = await modlog.search('lifotest');
 			assert.equal(search.results.length, 2);
 

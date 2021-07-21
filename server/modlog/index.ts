@@ -8,11 +8,11 @@
  * @license MIT
  */
 
-import {ProcessManager, FS, Repl} from '../lib';
-import type * as Database from 'better-sqlite3';
+import {ProcessManager, FS, Repl, SQL} from '../../lib';
+import type {DatabaseWrapper} from '../../lib/sql';
 
-import {parseModlog} from '../tools/modlog/converter';
-import {checkRipgrepAvailability} from './config-loader';
+import {parseModlog} from '../../tools/modlog/converter';
+import {checkRipgrepAvailability} from '../config-loader';
 
 const MAX_PROCESSES = 1;
 // If a modlog query takes longer than this, it will be logged.
@@ -20,8 +20,9 @@ const LONG_QUERY_DURATION = 2000;
 const MODLOG_PM_TIMEOUT = 30 * 60 * 60 * 1000; // 30 minutes
 
 const MODLOG_SCHEMA_PATH = 'databases/schemas/modlog.sql';
+const MODLOG_V2_MIGRATION_PATH = 'databases/migrations/modlog/v2.sql';
 export const MODLOG_PATH = 'logs/modlog';
-export const MODLOG_DB_PATH = `${__dirname}/../databases/modlog.db`;
+export const MODLOG_DB_PATH = Config.nofswriting ? ':memory:' : `${__dirname}/../databases/modlog.db`;
 
 const GLOBAL_PUNISHMENTS = [
 	'WEEKLOCK', 'LOCK', 'BAN', 'RANGEBAN', 'RANGELOCK', 'FORCERENAME',
@@ -40,8 +41,11 @@ const PUNISHMENTS = [
 ];
 const PUNISHMENTS_REGEX_STRING = `\\b(${PUNISHMENTS.join('|')}):.*`;
 
-export type ModlogID = RoomID | 'global';
-
+export type ModlogID = RoomID | 'global' | 'all';
+interface SQLQuery {
+	query: string;
+	args: (string | number)[];
+}
 interface ModlogResults {
 	results: ModlogEntry[];
 	duration: number;
@@ -55,7 +59,7 @@ interface ModlogTextQuery {
 }
 
 interface ModlogSQLQuery<T> {
-	statement: Database.Statement<T>;
+	statement: number;
 	args: T[];
 	returnsResults?: boolean;
 }
@@ -82,6 +86,12 @@ export interface ModlogEntry {
 	note: string;
 	/** Milliseconds since the epoch */
 	time: number;
+}
+
+export interface TransactionArguments extends Record<string, unknown> {
+	entries: Iterable<ModlogEntry>;
+	modlogInsertionStatement: number;
+	altsInsertionStatement: number;
 }
 
 export type PartialModlogEntry = Partial<ModlogEntry> & {action: string};
@@ -129,55 +139,80 @@ export class Modlog {
 	sharedStreams = new Map<ID, Streams.WriteStream>();
 	streams = new Map<ModlogID, Streams.WriteStream>();
 
-	readonly database?: Database.Database;
+	readonly database?: DatabaseWrapper;
 
-	readonly modlogInsertionQuery?: Database.Statement<ModlogEntry>;
-	readonly altsInsertionQuery?: Database.Statement<[number, string]>;
-	readonly renameQuery?: Database.Statement<[string, string]>;
-	readonly globalPunishmentsSearchQuery?: Database.Statement<[string, string, string, number, ...string[]]>;
+	readyPromise: Promise<void> | null;
+	private databaseReady: boolean;
+	/** entries to be written once the DB is ready */
+	queuedEntries: ModlogEntry[];
 
-	readonly insertionTransaction?: Database.Transaction;
+	modlogInsertionQuery?: number;
+	altsInsertionQuery?: number;
+	renameQuery?: number;
+	globalPunishmentsSearchQuery?: number;
+
 
 	constructor(flatFilePath: string, databasePath: string) {
 		this.logPath = flatFilePath;
+		this.queuedEntries = [];
+		this.databaseReady = false;
 
 		if (Config.usesqlite) {
 			const dbExists = FS(databasePath).existsSync();
-			const SQL = require('better-sqlite3');
-			this.database = new SQL(databasePath);
-			this.database!.exec("PRAGMA foreign_keys = ON;");
-
-			// Set up tables, etc
-
-			if (!dbExists) {
-				this.database!.exec(FS(MODLOG_SCHEMA_PATH).readIfExistsSync());
-			}
-
-			let insertionQuerySource = `INSERT INTO modlog (timestamp, roomid, visual_roomid, action, userid, autoconfirmed_userid, ip, action_taker_userid, note)`;
-			insertionQuerySource += ` VALUES ($time, $roomID, $visualRoomID, $action, $userid, $autoconfirmedID, $ip, $loggedBy, $note)`;
-			this.modlogInsertionQuery = this.database!.prepare(insertionQuerySource);
-
-			this.altsInsertionQuery = this.database!.prepare(`INSERT INTO alts (modlog_id, userid) VALUES (?, ?)`);
-			this.renameQuery = this.database!.prepare(`UPDATE modlog SET roomid = ? WHERE roomid = ?`);
-
-			this.globalPunishmentsSearchQuery = this.database!.prepare(
-				`SELECT * FROM modlog WHERE (roomid = 'global' OR roomid LIKE 'global-%') ` +
-				`AND (userid = ? OR autoconfirmed_userid = ? OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND userid = ?)) ` +
-				`AND timestamp > $timestamp ` +
-				`AND action IN (${this.formatArray(GLOBAL_PUNISHMENTS, [])})`
-			);
-
-			this.insertionTransaction = this.database!.transaction((entries: Iterable<ModlogEntry>) => {
-				for (const entry of entries) {
-					const result = this.modlogInsertionQuery!.run(entry);
-					const rowid = result.lastInsertRowid as number;
-
-					for (const alt of entry.alts || []) {
-						this.altsInsertionQuery!.run(rowid, alt);
-					}
-				}
+			this.database = SQL({
+				file: databasePath,
+				extension: 'server/modlog/transactions.ts',
 			});
+
+			// we can't prepare statements or block on database queries, since constructors must be synchronous
+			this.readyPromise = this.setupDatabase(dbExists).then(async () => {
+				this.databaseReady = true;
+				await this.writeSQL(this.queuedEntries);
+				this.readyPromise = null;
+			});
+		} else {
+			this.readyPromise = new Promise(resolve => resolve());
 		}
+	}
+
+	async setupDatabase(dbExists: boolean) {
+		if (!this.database) return;
+
+		await this.database.exec("PRAGMA foreign_keys = ON;");
+		await this.database.exec(`PRAGMA case_sensitive_like = true;`);
+
+		// Set up tables, etc
+		if (!dbExists) {
+			// TODO needs to block
+			await this.database.runFile(MODLOG_SCHEMA_PATH);
+		}
+
+		const statement = await this.database.prepare(
+			`SELECT count(*) AS hasDBInfo FROM sqlite_master WHERE type = 'table' AND name = 'db_info'`
+		);
+		const {hasDBInfo} = await this.database.get(statement);
+
+		if (hasDBInfo === 0) {
+			// needs v2 migration
+			Monitor.warn(`The modlog database is being migrated to version 2; this may take a while.`);
+			await this.database.runFile(MODLOG_V2_MIGRATION_PATH);
+			Monitor.warn(`Modlog database migration complete.`);
+		}
+
+
+		let insertionQuerySource = `INSERT INTO modlog (timestamp, roomid, visual_roomid, action, userid, autoconfirmed_userid, ip, action_taker_userid, is_global, note)`;
+		insertionQuerySource += ` VALUES ($time, $roomID, $visualRoomID, $action, $userid, $autoconfirmedID, $ip, $loggedBy, $isGlobal, $note)`;
+		this.modlogInsertionQuery = await this.database.prepare(insertionQuerySource);
+
+		this.altsInsertionQuery = await this.database.prepare(`INSERT INTO alts (modlog_id, userid) VALUES (?, ?)`);
+		this.renameQuery = await this.database.prepare(`UPDATE modlog SET roomid = ? WHERE roomid = ?`);
+
+		this.globalPunishmentsSearchQuery = await this.database.prepare(
+			`SELECT * FROM modlog WHERE is_global = 1 ` +
+			`AND (userid = ? OR autoconfirmed_userid = ? OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND userid = ?)) ` +
+			`AND timestamp > $timestamp ` +
+			`AND action IN (${this.formatArray(GLOBAL_PUNISHMENTS, [])})`
+		);
 	}
 
 	/******************
@@ -190,14 +225,6 @@ export class Modlog {
 
 	getSharedID(roomid: ModlogID): ID | false {
 		return roomid.includes('-') ? `${toID(roomid.split('-')[0])}-rooms` as ID : false;
-	}
-
-	runSQL(query: ModlogSQLQuery<any>): Database.RunResult {
-		return query.statement.run(query.args);
-	}
-
-	runSQLWithResults(query: ModlogSQLQuery<any>): unknown[] {
-		return query.statement.all(query.args);
 	}
 
 	generateIDRegex(search: string) {
@@ -236,7 +263,7 @@ export class Modlog {
 	/**
 	 * Writes to the modlog
 	 */
-	write(roomid: string, entry: PartialModlogEntry, overrideID?: string) {
+	async write(roomid: string, entry: PartialModlogEntry, overrideID?: string) {
 		const insertableEntry: ModlogEntry = {
 			action: entry.action,
 			roomID: entry.roomID || roomid,
@@ -253,16 +280,22 @@ export class Modlog {
 
 		this.writeText([insertableEntry]);
 		if (Config.usesqlitemodlog) {
-			if (insertableEntry.isGlobal && insertableEntry.roomID !== 'global' && !insertableEntry.roomID.startsWith('global-')) {
-				insertableEntry.roomID = `global-${insertableEntry.roomID}`;
-			}
-			this.writeSQL([insertableEntry]);
+			await this.writeSQL([insertableEntry]);
 		}
 	}
 
-	writeSQL(entries: Iterable<ModlogEntry>) {
+	async writeSQL(entries: Iterable<ModlogEntry>) {
 		if (!Config.usesqlite) return;
-		this.insertionTransaction?.(entries);
+		if (!this.databaseReady) {
+			this.queuedEntries.push(...entries);
+			return;
+		}
+		const toInsert: TransactionArguments = {
+			entries,
+			modlogInsertionStatement: this.modlogInsertionQuery!,
+			altsInsertionStatement: this.altsInsertionQuery!,
+		};
+		await this.database!.transaction('insertion', toInsert);
 	}
 
 	writeText(entries: Iterable<ModlogEntry>) {
@@ -320,7 +353,13 @@ export class Modlog {
 		if (streamExists) this.initialize(newID);
 
 		// rename SQL modlogs
-		if (this.renameQuery) this.runSQL({statement: this.renameQuery, args: [newID, oldID]});
+		if (Config.usesqlite) {
+			if (this.databaseReady) {
+				await this.database!.run(this.renameQuery!, [newID, oldID]);
+			} else {
+				throw new Error(`Attempted to rename a room's modlog before the SQL database was ready.`);
+			}
+		}
 	}
 
 	getActiveStreamIDs() {
@@ -378,7 +417,7 @@ export class Modlog {
 				...paths,
 				'-g', '!modlog_global.txt', '-g', '!README.md',
 			];
-			output = await ProcessManager.exec(['rg', ...options], {cwd: `${__dirname}/../`});
+			output = await ProcessManager.exec(['rg', ...options], {cwd: `${__dirname}/../../`});
 		} catch (error) {
 			return results;
 		}
@@ -406,14 +445,14 @@ export class Modlog {
 		return response.length;
 	}
 
-	getGlobalPunishmentsSQL(userid: ID, days: number) {
+	async getGlobalPunishmentsSQL(userid: ID, days: number) {
 		if (!this.globalPunishmentsSearchQuery) {
 			throw new Error(`Modlog#globalPunishmentsSearchQuery is falsy but an SQL search function was called.`);
 		}
 		const args: (string | number)[] = [
 			userid, userid, userid, Date.now() - (days * 24 * 60 * 60 * 1000), ...GLOBAL_PUNISHMENTS,
 		];
-		const results = this.runSQLWithResults({statement: this.globalPunishmentsSearchQuery, args});
+		const results = await this.database!.all(this.globalPunishmentsSearchQuery, args);
 		return results.length;
 	}
 
@@ -430,9 +469,9 @@ export class Modlog {
 				.map(room => room.roomid) :
 			[roomid]);
 
-		if (Config.usesqlite && Config.usesqlitemodlog) {
-			const query = this.prepareSQLSearch(rooms, maxLines, onlyPunishments, search);
-			const results = this.runSQLWithResults(query).map(row => this.dbRowToModlogEntry(row));
+		if (Config.usesqlite && Config.usesqlitemodlog && this.databaseReady) {
+			const query = await this.prepareSQLSearch(rooms, maxLines, onlyPunishments, search);
+			const results = (await this.database!.all(query.statement, query.args)).map((row: any) => this.dbRowToModlogEntry(row));
 
 			const duration = Date.now() - startTime;
 			if (duration > LONG_QUERY_DURATION) {
@@ -452,21 +491,15 @@ export class Modlog {
 	}
 
 	dbRowToModlogEntry(row: any): ModlogEntry {
-		let roomID = row.roomid;
-		let isGlobal = false;
-		if (roomID.startsWith('global-')) {
-			roomID = roomID.slice(7);
-			isGlobal = true;
-		}
 		return {
 			action: row.action,
-			roomID,
+			roomID: row.roomid,
 			visualRoomID: row.visual_roomid,
 			userid: row.userid,
 			autoconfirmedID: row.autoconfirmed_userid,
 			alts: row.alts?.split(',') || [],
 			ip: row.ip || null,
-			isGlobal,
+			isGlobal: Boolean(row.is_global),
 			loggedBy: row.action_taker_userid,
 			note: row.note,
 			time: row.timestamp,
@@ -512,94 +545,124 @@ export class Modlog {
 		};
 	}
 
-	prepareSQLSearch(
+	/**
+	 * This is a helper method to build SQL queries optimized to better utilize indices.
+	 * This was discussed in https://psim.us/devdiscord (although the syntax is slightly different in practice):
+	 * https://discord.com/channels/630837856075513856/630845310033330206/766736895132303371
+	 *
+	 * @param select A query fragment of the form `SELECT ... FROM ...`
+	 * @param ors Each OR condition fragment (e.g. `userid = ?`)
+	 * @param ands Each AND conditions to be appended to every OR condition (e.g. `roomid = ?`)
+	 * @param sortAndLimit A fragment of the form `ORDER BY ... LIMIT ...`
+	 */
+	async buildParallelIndexScanQuery(
+		select: string,
+		ors: SQLQuery[],
+		ands: SQLQuery[],
+		sortAndLimit: SQLQuery
+	): Promise<ModlogSQLQuery<string | number>> {
+		if (!this.database) throw new Error(`Parallel index scan queries cannot be built when SQLite is not enabled.`);
+		// assemble AND fragment
+		let andQuery = ``;
+		const andArgs = [];
+		for (const and of ands) {
+			if (andQuery.length) andQuery += ` AND `;
+			andQuery += and.query;
+			andArgs.push(...and.args);
+		}
+
+		// assemble query
+		let query = ``;
+		const args = [];
+		if (!ors.length) {
+			query = `${select} ${andQuery ? ` WHERE ${andQuery}` : ``}`;
+			args.push(...andArgs);
+		} else {
+			for (const or of ors) {
+				if (query.length) query += ` UNION `;
+				query += `SELECT * FROM (${select} WHERE ${or.query} ${andQuery ? ` AND ${andQuery}` : ``} ${sortAndLimit.query})`;
+				args.push(...or.args, ...andArgs, ...sortAndLimit.args);
+			}
+		}
+		query += ` ${sortAndLimit.query}`;
+		args.push(...sortAndLimit.args);
+
+		return {statement: await this.database.prepare(query), args};
+	}
+
+	async prepareSQLSearch(
 		rooms: ModlogID[],
 		maxLines: number,
 		onlyPunishments: boolean,
 		search: ModlogSearch
-	): ModlogSQLQuery<string | number> {
-		for (const room of [...rooms]) {
-			rooms.push(`global-${room}` as ModlogID);
+	): Promise<ModlogSQLQuery<string | number>> {
+		const select = `SELECT *, (SELECT group_concat(userid, ',') FROM alts WHERE alts.modlog_id = modlog.modlog_id) as alts FROM modlog`;
+		const ors = [];
+		const ands = [];
+		const sortAndLimit = {query: `ORDER BY timestamp DESC`, args: []} as SQLQuery;
+		if (maxLines) {
+			sortAndLimit.query += ` LIMIT ?`;
+			sortAndLimit.args.push(maxLines);
 		}
 
-		const args: (string | number)[] = [];
-
-		let roomChecker = `roomid IN (${this.formatArray(rooms, args)})`;
-		if (rooms.includes('global')) roomChecker = `(roomid LIKE 'global-%' OR ${roomChecker})`;
-
-		let query = `SELECT *, (SELECT group_concat(userid, ',') FROM alts WHERE alts.modlog_id = modlog.modlog_id) as alts FROM modlog`;
-		query += ` WHERE ${roomChecker}`;
+		// Limit the query to only the specified rooms, treating "global" as a pseudo-room that checks is_global
+		// (This is because the text modlog system gave global modlog entries their own file, as a room would have.)
+		if (!rooms.includes('all')) {
+			const args: (string | number)[] = [];
+			let roomChecker = `roomid IN (${this.formatArray(rooms, args)})`;
+			if (rooms.includes('global')) {
+				if (rooms.length > 1) {
+					roomChecker = `(is_global = 1 OR ${roomChecker})`;
+				} else {
+					roomChecker = `is_global = 1`;
+					// remove the room argument added by the initial roomChecker assignment
+					args.pop();
+				}
+			}
+			ands.push({query: roomChecker, args});
+		}
 
 		if (search.anyField) {
-			query += ` AND (action LIKE ? || '%'`;
-
-			query += ` OR userid LIKE ? || '%'`;
-			query += ` OR autoconfirmed_userid LIKE ? || '%'`;
-			query += ` OR EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid LIKE ? || '%')`;
-			query += ` OR action_taker_userid LIKE ? || '%'`;
-
-			query += ` OR ip LIKE ? || '%'`;
-
-			args.push(...Array(6).fill(search.anyField));
-
-			query += ` OR note LIKE '%' || ? || '%')`;
-			args.push(search.anyField);
+			for (const or of [
+				`action LIKE ?`, `userid LIKE ?`, `autoconfirmed_userid LIKE ?`, `ip LIKE ?`, `action_taker_userid LIKE ?`,
+				`EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid LIKE ?)`,
+			]) {
+				ors.push({query: or, args: [search.anyField + '%']});
+			}
+			ors.push({query: `note LIKE ?`, args: [`%${search.anyField}%`]});
 		}
 
 		if (search.action) {
-			query += ` AND action LIKE ? || '%'`;
-			args.push(search.action);
+			ors.push({query: `action LIKE ?`, args: [search.action + '%']});
 		} else if (onlyPunishments) {
-			query += ` AND action IN (${this.formatArray(PUNISHMENTS, args)})`;
+			const args: (string | number)[] = [];
+			ors.push({query: `action IN (${this.formatArray(PUNISHMENTS, args)})`, args});
+		}
+
+		if (search.ip) ors.push({query: `ip LIKE ?`, args: [search.ip + '%']});
+		if (search.actionTaker) ors.push({query: `action_taker_userid LIKE ?`, args: [search.actionTaker + '%']});
+
+		if (search.note) {
+			const tester = search.note.isExact ? `= ?` : `LIKE ?`;
+			for (const noteSearch of search.note.searches) {
+				ors.push({query: `note ${tester}`, args: [(search.note.isExact ? noteSearch + '%' : `%${noteSearch}%`)]});
+			}
 		}
 
 		if (search.user) {
 			if (search.user.isExact) {
-				query += [
-					` AND ( `,
-					`	userid = ? OR autoconfirmed_userid = ? OR `,
-					`	EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid = ?)`,
-					`)`,
-				].join(' ');
-				args.push(search.user.search, search.user.search, search.user.search);
+				const args = [search.user.search];
+				ors.push({query: `userid = ?`, args});
+				ors.push({query: `autoconfirmed_userid = ?`, args});
+				ors.push({query: `EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid = ?)`, args});
 			} else {
-				query += [
-					` AND ( `,
-					`	userid LIKE ? || '%' OR autoconfirmed_userid LIKE ? || '%' OR `,
-					`	EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid LIKE ? || '%')`,
-					`)`,
-				].join(' ');
-				args.push(search.user.search, search.user.search, search.user.search);
+				const args = [search.user.search + '%'];
+				ors.push({query: `userid LIKE ?`, args});
+				ors.push({query: `autoconfirmed_userid LIKE ?`, args});
+				ors.push({query: `EXISTS(SELECT * FROM alts WHERE alts.modlog_id = modlog.modlog_id AND alts.userid LIKE ?)`, args});
 			}
 		}
-
-		if (search.ip) {
-			query += ` AND ip LIKE ? || '%'`;
-			args.push(search.ip);
-		}
-
-		if (search.actionTaker) {
-			query += ` AND action_taker_userid LIKE ? || '%'`;
-			args.push(search.actionTaker);
-		}
-
-		if (search.note) {
-			const tester = search.note.isExact ? `= ?` : `LIKE ? || '%'`;
-			const parts = [];
-			for (const noteSearch of search.note.searches) {
-				parts.push(`note ${tester}`);
-				args.push(toID(noteSearch));
-			}
-			query += ` AND (${parts.join(' OR ')})`;
-		}
-
-		query += ` ORDER BY timestamp DESC`;
-		if (maxLines) {
-			query += ` LIMIT ?`;
-			args.push(maxLines);
-		}
-
-		return {statement: this.database!.prepare(query), args};
+		return this.buildParallelIndexScanQuery(select, ors, ands, sortAndLimit);
 	}
 
 	private async readRoomModlog(path: string, results: SortedLimitedLengthList, regex?: RegExp) {
@@ -638,8 +701,8 @@ export const PM = new ProcessManager.QueryProcessManager<ModlogTextQuery, Modlog
 }, MODLOG_PM_TIMEOUT);
 
 if (!PM.isParentProcess) {
-	global.Config = require('./config-loader').Config;
-	global.toID = require('../sim/dex').Dex.toID;
+	global.Config = require('../config-loader').Config;
+	global.toID = require('../../sim/dex').Dex.toID;
 
 	global.Monitor = {
 		crashlog(error: Error, source = 'A modlog process', details: AnyObject | null = null) {

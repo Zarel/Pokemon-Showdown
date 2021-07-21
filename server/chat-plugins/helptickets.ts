@@ -428,8 +428,8 @@ export class HelpTicket extends Rooms.RoomGame {
 	}
 	static modlogStream = Rooms.Modlog.initialize('help-texttickets' as ModlogID);
 	// workaround to modlog for no room
-	static modlog(entry: PartialModlogEntry) {
-		Rooms.Modlog.write('help-texttickets' as ModlogID, entry);
+	static async modlog(entry: PartialModlogEntry) {
+		await Rooms.Modlog.write('help-texttickets' as ModlogID, entry);
 	}
 	static logTextResult(ticket: TicketState & {text: [string, string], resolved: ResolvedTicketInfo}) {
 		const entry = {
@@ -2012,7 +2012,7 @@ export const commands: Chat.ChatCommands = {
 				ticket.text = [text, contextString];
 				ticket.active = true;
 				tickets[user.id] = ticket;
-				HelpTicket.modlog({
+				await HelpTicket.modlog({
 					action: 'TEXTTICKET OPEN',
 					loggedBy: user.id,
 					note: `(${ticket.type}) ${text}${contextString ? `, context: ${contextString}` : ''}`,
@@ -2152,7 +2152,7 @@ export const commands: Chat.ChatCommands = {
 			return this.parse(`/join view-help-text-${toID(target)}`);
 		},
 
-		resolve(target, room, user) {
+		async resolve(target, room, user) {
 			this.checkCan('lock');
 			const [ticketerName, result] = Utils.splitFirst(target, ',').map(i => i.trim());
 			const ticketId = toID(ticketerName);
@@ -2184,7 +2184,7 @@ export const commands: Chat.ChatCommands = {
 			// ticketType\ttotalTime\ttimeToFirstClaim\tinactiveTime\tresolution\tresult\tstaff,userids,seperated,with,commas
 			writeStats(`${ticket.type}\t${Date.now() - ticket.created}\t0\t0\tresolved\tvalid\t${user.id}`);
 			this.popupReply(`You resolved ${ticketId}'s ticket.`);
-			HelpTicket.modlog({
+			await HelpTicket.modlog({
 				action: 'TEXTTICKET CLOSE',
 				loggedBy: user.id,
 				note: privateReason,
@@ -2356,7 +2356,7 @@ export const commands: Chat.ChatCommands = {
 					ticketGame.writeStats('ticketban');
 					helpRoom.destroy();
 				} else if (targetTicket?.text) {
-					HelpTicket.modlog({
+					await HelpTicket.modlog({
 						action: `TICKETBAN`,
 						loggedBy: user.id,
 						note: `(Ticket content: ${targetTicket.text.join(' ').replace(/\n/ig, ' ')})`,
