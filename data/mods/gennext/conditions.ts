@@ -35,7 +35,7 @@ export const Conditions: {[k: string]: ModdedConditionData} = {
 			if (!move.self || (move.self !== true && move.self.volatileStatus !== 'lockedmove')) {
 				// don't lock, and bypass confusion for calming
 				delete target.volatiles['lockedmove'];
-			} else if (target.ability === 'owntempo') {
+			} else if (target.hasAbility('owntempo')) {
 				// Own Tempo prevents locking
 				delete target.volatiles['lockedmove'];
 			}

@@ -1580,4 +1580,105 @@ export const Rulesets: {[k: string]: FormatData} = {
 			this.add('-start', pokemon, 'typechange', (pokemon.illusion || pokemon).getTypes(true).join('/'), '[silent]');
 		},
 	},
+	multipleabilities: {
+		effectType: 'Rule',
+		name: 'Multiple Abilities',
+		desc: "Allows the simulator to recognize that Pok&eacute;mon may have multiple abilities active simulataneously.",
+		// Implemented in sim and data
+	},
+	pokebilitiesrule: {
+		effectType: 'Rule',
+		name: 'Pokebilities Rule',
+		desc: "Pokebilities battle effects: Pok&eacute;mon have all of their released abilities simultaneously.",
+		ruleset: ['Multiple Abilities'],
+		onValidateRule() {
+			if (!this.ruleTable.has('multipleabilities')) {
+				throw new Error(`Pokebilities Rule requires Multiple Abilities to be active.`);
+			}
+		},
+		onBegin() {
+			this.add('rule', 'Pokebilities Rule: Pokémon have all of their released abilities simultaneously.');
+
+			for (const pokemon of this.getAllPokemon()) {
+				if (pokemon.ability === this.toID(pokemon.species.abilities['S'])) {
+					continue;
+				}
+				const existingPseudoAbilities = pokemon.m.pseudoAbilities || [];
+				pokemon.m.pokebilitiesPseudoAbilities = Object.keys(pokemon.species.abilities)
+					.filter(key => key !== 'S' && (key !== 'H' || !pokemon.species.unreleasedHidden))
+					.map(key => this.toID(pokemon.species.abilities[key as "0" | "1" | "H" | "S"]))
+					.filter(ability => ability !== pokemon.ability);
+				pokemon.m.pseudoAbilities = [...new Set(pokemon.m.pokebilitiesPseudoAbilities.concat(existingPseudoAbilities))];
+			}
+		},
+		onSwitchInPriority: 3,
+		onSwitchIn(pokemon) {
+			if (pokemon.m.pseudoAbilities) {
+				for (const pseudoAbility of pokemon.m.pseudoAbilities) {
+					const volatileName = 'ability:' + pseudoAbility;
+					if (pokemon.getVolatile(volatileName)) continue;
+					pokemon.addVolatile(volatileName, pokemon);
+				}
+			}
+		},
+		onAfterMega(pokemon) {
+			if (!pokemon.m.pokebilitiesPseudoAbilities) return; // Only clear our own pseudo-abilities
+
+			for (const pseudoAbility of pokemon.m.pokebilitiesPseudoAbilities) {
+				pokemon.removeVolatile('ability:' + pseudoAbility);
+			}
+			pokemon.m.pseudoAbilities = pokemon.m.pseudoAbilities.filter(
+				(ability: string) => !pokemon.m.pokebilitiesPseudoAbilities.includes(ability)
+			);
+			pokemon.m.pokebilitiesPseudoAbilities = undefined;
+		},
+	},
+	sharedpowerrule: {
+		effectType: 'Rule',
+		name: 'Shared Power Rule',
+		desc: "Shared Power battle effects: Once a Pok&eacute;mon switches in, its ability is shared with the rest of the team.",
+		ruleset: ['Multiple Abilities'],
+		onValidateRule() {
+			if (!this.ruleTable.has('multipleabilities')) {
+				throw new Error(`Shared Power Rule requires Multiple Abilities to be active.`);
+			}
+		},
+		onBegin() {
+			this.add('rule', 'Shared Power Rule: Once a Pokémon switches in, its ability is shared with the rest of the team.');
+		},
+		getSharedPower(pokemon) {
+			const sharedPower = new Set<string>();
+			for (const ally of pokemon.side.pokemon) {
+				if (ally.previouslySwitchedIn > 0) {
+					sharedPower.add(ally.baseAbility);
+				}
+			}
+			sharedPower.delete(pokemon.baseAbility);
+			return sharedPower;
+		},
+		onBeforeSwitchIn(pokemon) {
+			const rulesets = this.dex.data.Rulesets;
+			const rule = rulesets.hasOwnProperty('sharedpowerrule') ? rulesets['sharedpowerrule'] as Format : null;
+			if (!rule) return;
+
+			for (const ability of rule.getSharedPower!(pokemon)) {
+				const effect = 'ability:' + ability;
+				pokemon.volatiles[effect] = {id: this.toID(effect), target: pokemon};
+				if (!pokemon.m.pseudoAbilities) pokemon.m.pseudoAbilities = [];
+				if (!pokemon.m.pseudoAbilities.includes(ability)) pokemon.m.pseudoAbilities.push(ability);
+			}
+		},
+		onSwitchInPriority: 2,
+		onSwitchIn(pokemon) {
+			const rulesets = this.dex.data.Rulesets;
+			const rule = rulesets.hasOwnProperty('sharedpowerrule') ? rulesets['sharedpowerrule'] as Format : null;
+			if (!rule) return;
+
+			for (const ability of rule.getSharedPower!(pokemon)) {
+				const effect = 'ability:' + ability;
+				delete pokemon.volatiles[effect];
+				pokemon.addVolatile(effect);
+			}
+		},
+	},
 };

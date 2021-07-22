@@ -2358,7 +2358,7 @@ export const Conditions: {[k: string]: ModdedConditionData & {innateName?: strin
 			if (effect.effectType === 'Move' && effect.infiltrates && !target.isAlly(source)) return;
 			if (target !== source) {
 				this.debug('interrupting setStatus');
-				if (effect.id === 'synchronize' || (effect.effectType === 'Move' && !effect.secondaries)) {
+				if (effect.name === "Synchronize" || (effect.effectType === 'Move' && !effect.secondaries)) {
 					this.add('-activate', target, 'move: Safeguard');
 				}
 				return null;

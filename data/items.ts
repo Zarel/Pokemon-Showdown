@@ -76,7 +76,7 @@ export const Items: {[itemid: string]: ItemData} = {
 			if (target.boosts['spe'] === 6 || noAtkChange || noContraryAtkChange) {
 				return;
 			}
-			if (effect.id === 'intimidate') {
+			if (effect.name === "Intimidate") {
 				target.useItem();
 			}
 		},

@@ -13,7 +13,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 			}
 		},
 		onAnyDamage(damage, target, source, effect) {
-			if (effect?.id === 'aftermath') {
+			if (effect?.name === "Aftermath") {
 				this.heal(this.effectState.target.baseMaxhp / 4);
 				this.add('-immune', this.effectState.target, '[from] ability: Porous');
 			}
@@ -87,7 +87,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		onAllySetStatus(status, target, source, effect) {
 			if (target.hasType('Grass') && source && target !== source && effect && effect.id !== 'yawn') {
 				this.debug('interrupting setStatus with Growth Veil');
-				if (effect.id === 'synchronize' || (effect.effectType === 'Move' && !effect.secondaries)) {
+				if (effect.name === "Synchronize" || (effect.effectType === 'Move' && !effect.secondaries)) {
 					const effectHolder = this.effectState.target;
 					this.add('-block', target, 'ability: Growth Veil', '[of] ' + effectHolder);
 				}
@@ -456,23 +456,56 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		},
 		onUpdate(pokemon) {
 			if (!pokemon.isStarted || this.effectState.gaveUp) return;
-			const possibleTargets = pokemon.adjacentFoes();
+			const isPokemonAbility = pokemon.ability === 'pillage';
+			const possibleTargets: Pokemon[] = pokemon.adjacentFoes();
 			while (possibleTargets.length) {
 				let rand = 0;
 				if (possibleTargets.length > 1) rand = this.random(possibleTargets.length);
 				const target = possibleTargets[rand];
-				const ability = target.getAbility();
+				let possibleAbilities = [target.ability];
+				const ownAbilities = [pokemon.ability];
+				if (this.ruleTable.has('multipleabilities')) {
+					for (const abilityVolatile of Object.keys(target.volatiles).filter(key => key.startsWith('ability:'))) {
+						const id = abilityVolatile.replace(/^(ability:)/, '') as ID;
+						if (id) possibleAbilities.push(id);
+					}
+					for (const abilityVolatile of Object.keys(pokemon.volatiles).filter(key => key.startsWith('ability:'))) {
+						const id = abilityVolatile.replace(/^(ability:)/, '') as ID;
+						if (id) ownAbilities.push(id);
+					}
+				}
 				const additionalBannedAbilities = [
 					// Zen Mode included here for compatability with Gen 5-6
 					'noability', 'flowergift', 'forecast', 'hungerswitch', 'illusion', 'pillage',
-					'imposter', 'neutralizinggas', 'powerofalchemy', 'receiver', 'trace', 'zenmode',
+					'imposter', 'neutralizinggas', 'powerofalchemy', 'receiver', 'trace', 'zenmode', ...(ownAbilities || []),
 				];
-				if (target.getAbility().isPermanent || additionalBannedAbilities.includes(target.ability)) {
+				possibleAbilities = possibleAbilities
+					.filter(val => !this.dex.abilities.get(val).isPermanent && !additionalBannedAbilities.includes(val));
+				if (!possibleAbilities.length) {
 					possibleTargets.splice(rand, 1);
 					continue;
 				}
-				target.setAbility('pillage', pokemon);
-				pokemon.setAbility(ability);
+
+				const ability = this.dex.abilities.get(this.sample(possibleAbilities));
+
+				const isTargetAbilityReal = target.ability === ability.id;
+				if (isTargetAbilityReal) {
+					if (target.species.id !== 'yaciancrowned') {
+						target.setAbility('pillage', pokemon);
+					}
+				} else {
+					target.removeVolatile('ability:' + ability);
+					if (target.species.id !== 'yaciancrowned') {
+						target.addVolatile('ability:pillage', pokemon);
+					}
+				}
+
+				if (isPokemonAbility) {
+					pokemon.setAbility(ability);
+				} else {
+					pokemon.removeVolatile('ability:pillage');
+					pokemon.addVolatile('ability:' + ability.id, pokemon);
+				}
 
 				this.add('-activate', pokemon, 'ability: Pillage');
 				this.add('-activate', pokemon, 'Skill Swap', '', '', '[of] ' + target);
@@ -639,7 +672,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 			}
 		},
 		onBoost(boost, target, source, effect) {
-			if (effect.id === 'intimidate') {
+			if (effect.name === "Intimidate") {
 				delete boost.atk;
 				this.add('-immune', target, '[from] ability: Scrappy');
 			}

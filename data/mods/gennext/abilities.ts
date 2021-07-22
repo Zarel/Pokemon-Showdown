@@ -210,14 +210,14 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 				this.add('-start', target, 'Slow Start');
 			},
 			onModifyAtk(atk, pokemon) {
-				if (pokemon.ability !== 'slowstart') {
+				if (!pokemon.hasAbility('slowstart')) {
 					pokemon.removeVolatile('slowstart');
 					return;
 				}
 				return atk / 2;
 			},
 			onModifySpe(spe, pokemon) {
-				if (pokemon.ability !== 'slowstart') {
+				if (!pokemon.hasAbility('slowstart')) {
 					pokemon.removeVolatile('slowstart');
 					return;
 				}
@@ -364,7 +364,11 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		},
 		onHit(target, source, move) {
 			if (move.id === 'shellsmash') {
-				target.setAbility('');
+				if (target.ability === 'shellarmor') {
+					target.setAbility('');
+				} else {
+					target.removeVolatile('ability:shellarmor');
+				}
 			}
 		},
 		desc: "This Pokemon cannot be struck by a critical hit. This ability also reduces incoming move damage by 1/10 of the user's max HP.  If the user uses Shell Smash, this ability's effect ends.",
@@ -403,7 +407,11 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 				this.add('-message', "Its damage was reduced by Weak Armor!");
 				damage -= target.maxhp / 10;
 				if (damage < 0) damage = 0;
-				target.setAbility('');
+				if (target.ability === 'weakarmor') {
+					target.setAbility('');
+				} else {
+					target.removeVolatile('ability:weakarmor');
+				}
 				this.boost({spe: 1});
 				return damage;
 			}
@@ -424,7 +432,12 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 				if (damage < 0) damage = 0;
 				if (effect.type === 'Ice' || effect.type === 'Water') {
 					this.add('-activate', target, 'ability: Magma Armor');
-					target.setAbility('battlearmor');
+					if (target.ability === 'magmaarmor') {
+						target.setAbility('battlearmor');
+					} else {
+						target.removeVolatile('ability:magmaarmor');
+						target.addVolatile('ability:battlearmor', target);
+					}
 					damage = 0;
 				} else {
 					this.add('-message', "Its damage was reduced by Magma Armor!");
@@ -663,7 +676,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		condition: {
 			duration: 2,
 			onFoeTrapPokemon(pokemon) {
-				if (pokemon.ability !== 'shadowtag') {
+				if (!pokemon.hasAbility('shadowtag')) {
 					pokemon.tryTrap(true);
 				}
 			},
@@ -675,7 +688,7 @@ export const Abilities: {[k: string]: ModdedAbilityData} = {
 		onFoeMaybeTrapPokemon(pokemon, source) {
 			if (!source) source = this.effectState.target;
 			if (!source || !pokemon.isAdjacent(source)) return;
-			if (pokemon.ability !== 'shadowtag' && !source.volatiles['shadowtag']) {
+			if (!pokemon.hasAbility('shadowtag') && !source.volatiles['shadowtag']) {
 				pokemon.maybeTrapped = true;
 			}
 		},

@@ -765,11 +765,15 @@ export class Pokemon {
 	}
 
 	ignoringAbility() {
+		const isMultipleAbilities = this.battle.ruleTable.has('multipleabilities');
+
 		// Check if any active pokemon have the ability Neutralizing Gas
 		let neutralizinggas = false;
 		for (const pokemon of this.battle.getAllActive()) {
 			// can't use hasAbility because it would lead to infinite recursion
-			if (pokemon.ability === ('neutralizinggas' as ID) && !pokemon.volatiles['gastroacid'] &&
+			if ((pokemon.ability === ('neutralizinggas' as ID) ||
+					(isMultipleAbilities && pokemon.volatiles['ability:neutralizinggas'])) &&
+				!pokemon.volatiles['gastroacid'] &&
 				!pokemon.abilityState.ending) {
 				neutralizinggas = true;
 				break;
@@ -778,8 +782,10 @@ export class Pokemon {
 
 		return !!(
 			(this.battle.gen >= 5 && !this.isActive) ||
-			((this.volatiles['gastroacid'] || (neutralizinggas && this.ability !== ('neutralizinggas' as ID))) &&
-			!this.getAbility().isPermanent
+			((this.volatiles['gastroacid'] ||
+				(neutralizinggas && (this.ability !== ('neutralizinggas' as ID) ||
+					(isMultipleAbilities && this.volatiles['ability:neutralizinggas']))
+				)) && !this.getAbility().isPermanent
 			)
 		);
 	}
@@ -1192,7 +1198,17 @@ export class Pokemon {
 		} else {
 			this.battle.add('-transform', this, pokemon);
 		}
-		if (this.battle.gen > 2) this.setAbility(pokemon.ability, this, true);
+		if (this.battle.gen > 2) {
+			this.setAbility(pokemon.ability, this, true);
+			if (this.battle.ruleTable.has('multipleabilities')) {
+				for (const abilityVolatile of Object.keys(this.volatiles).filter(key => key.startsWith('ability:'))) {
+					this.removeVolatile(abilityVolatile);
+				}
+				for (const abilityVolatile of Object.keys(pokemon.volatiles).filter(key => key.startsWith('ability:'))) {
+					this.addVolatile(abilityVolatile, this);
+				}
+			}
+		}
 
 		// Change formes based on held items (for Transform)
 		// Only ever relevant in Generation 4 since Generation 3 didn't have item-based forme changes
@@ -1725,11 +1741,11 @@ export class Pokemon {
 		return this.battle.dex.abilities.getByID(this.ability);
 	}
 
-	hasAbility(ability: string | string[]) {
+	hasAbility(ability: string | string[]): boolean {
 		if (this.ignoringAbility()) return false;
-		const ownAbility = this.ability;
-		if (!Array.isArray(ability)) return ownAbility === toID(ability);
-		return ability.map(toID).includes(ownAbility);
+		if (Array.isArray(ability)) return ability.some(abil => this.hasAbility(abil));
+		ability = this.battle.toID(ability);
+		return this.ability === ability || !!this.volatiles['ability:' + ability];
 	}
 
 	clearAbility() {

@@ -5281,7 +5281,7 @@ export const Moves: {[k: string]: ModdedMoveData} = {
 					return false;
 				}
 
-				if (effect.id === 'cutecharm') {
+				if (effect.name === "Cute Charm") {
 					this.add('-start', pokemon, 'Attract', '[from] ability: Cute Charm', '[of] ' + source);
 				} else if (effect.id === 'destinyknot') {
 					this.add('-start', pokemon, 'Attract', '[from] item: Destiny Knot', '[of] ' + source);
